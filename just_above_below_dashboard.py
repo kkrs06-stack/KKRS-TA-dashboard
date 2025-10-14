@@ -154,17 +154,17 @@ def ema50_comparison_row(ema50, sma20, section_type):
     if section_type == 'long':
         if ema50 > sma20:
             yn = "Y"
-            color = "#FF3A3A"  # RED
+            color = "#FF3A3A"
         else:
             yn = "N"
-            color = "#37F553"  # GREEN
-    else:  # short
+            color = "#37F553"
+    else:
         if sma20 > ema50:
             yn = "N"
-            color = "#FF3A3A"  # RED
+            color = "#FF3A3A"
         else:
             yn = "Y"
-            color = "#37F553"  # GREEN
+            color = "#37F553"
     return f"<span style='font-weight:700;'>50: <b>{ema50:.2f}</b> <span style='color:{color};font-size:1.19em;'>{yn}</span></span>"
 
 def two_percent_label(ema50, sma20, section_type):
@@ -332,6 +332,33 @@ def get_sma20_crossover_data():
             short_results.append(short_res)
     return long_results, short_results
 
+# ------ Correct M & W logic using LAST daily close compared to last SMA20 in monthly/weekly ------
+def get_above_sma_labels(ticker):
+    try:
+        df_d = fetch_ohlcv(ticker)
+        last_close = df_d['Close'].iloc[-1]
+        # Monthly
+        df_m = df_d['Close'].resample('M').last().dropna().to_frame()
+        df_m['SMA20'] = df_m['Close'].rolling(20).mean()
+        sma20_m = df_m['SMA20'].iloc[-1] if len(df_m) >= 20 else np.nan
+        if not np.isnan(sma20_m):
+            m_yn = last_close > sma20_m
+            m_val = f"<span style='color:{'#37F553' if m_yn else '#FF3A3A'};font-weight:bold;'>M: {'Y' if m_yn else 'N'}</span>"
+        else:
+            m_val = "<span style='color:#FFD700;'>M: -</span>"
+        # Weekly
+        df_w = df_d['Close'].resample('W-FRI').last().dropna().to_frame()
+        df_w['SMA20'] = df_w['Close'].rolling(20).mean()
+        sma20_w = df_w['SMA20'].iloc[-1] if len(df_w) >= 20 else np.nan
+        if not np.isnan(sma20_w):
+            w_yn = last_close > sma20_w
+            w_val = f"<span style='color:{'#37F553' if w_yn else '#FF3A3A'};font-weight:bold;'>W: {'Y' if w_yn else 'N'}</span>"
+        else:
+            w_val = "<span style='color:#FFD700;'>W: -</span>"
+        return f"{m_val} | {w_val}"
+    except:
+        return "<span style='color:#FFD700;'>M: - | W: -</span>"
+
 def just_above_below_dashboard():
     today_str = datetime.datetime.now().strftime("%d-%b-%Y")
     st.markdown(
@@ -390,6 +417,7 @@ def just_above_below_dashboard():
                 ema_comp_html = ema50_comparison_row(ema50_val, d_val, section_type)
                 macd_color = "#37F553" if macd > macd_signal else "#FF3A3A"
                 gap_label = gap_ema50_label(price, ema50_val, d_val, section_type)
+                mw_label = get_above_sma_labels(symbol)
 
                 if supertrend_dir == "UP":
                     st_dir_col = "#37F553"
@@ -416,7 +444,6 @@ def just_above_below_dashboard():
 
                 tview_url = f"https://www.tradingview.com/chart/lDI0poON/?symbol=NSE:{symbol.replace('.NS','')}"
 
-                # Left column rows (unchanged, no GAP here)
                 left_rows = [
                     f"D: <b>{d_val}</b>",
                     ema_comp_html,
@@ -425,13 +452,13 @@ def just_above_below_dashboard():
                     f"OBV: {obv_arrow}",
                 ]
 
-                # Right column rows with GAP placed directly below 2% label
                 right_rows = [
                     f"ATR: <b>{s.get('ATR14','')}</b>",
                     f"MACD: <span style='color:{macd_color};font-weight:700;'>{macd}</span>",
                     f"Signal: <span style='color:#FFA500;font-weight:700;'>{macd_signal}</span>",
                     two_percent_label(ema50_val, d_val, section_type),
-                    gap_label  # placement moved here as requested
+                    gap_label,
+                    mw_label
                 ]
 
                 left_html = "".join([f"<div style='font-size:1.03em;color:#ECECEC;margin-bottom:2px;'>{row}</div>" for row in left_rows])
