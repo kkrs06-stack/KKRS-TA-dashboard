@@ -9,6 +9,40 @@ import sys
 import os
 from ta.trend import ADXIndicator
 from ta.volatility import AverageTrueRange
+import scipy.signal
+
+def detect_rsi_divergence(df, rsi_col='RSI', lookback=14):
+    price = df['Close']
+    rsi = df[rsi_col]
+    lows = scipy.signal.argrelextrema(price.values, np.less, order=lookback)[0]
+    highs = scipy.signal.argrelextrema(price.values, np.greater, order=lookback)[0]
+    if len(lows) < 2 and len(highs) < 2:
+        return None
+    bull = None
+    bear = None
+    for i in range(1, len(lows)):
+        if price.iloc[lows[i]] < price.iloc[lows[i-1]] and rsi.iloc[lows[i]] > rsi.iloc[lows[i-1]]:
+            bull = lows[i]
+    for i in range(1, len(highs)):
+        if price.iloc[highs[i]] > price.iloc[highs[i-1]] and rsi.iloc[highs[i]] < rsi.iloc[highs[i-1]]:
+            bear = highs[i]
+    if bull is not None and (bear is None or bull > bear):
+        return "Bull"
+    elif bear is not None and (bull is None or bear > bull):
+        return "Bear"
+    else:
+        return None
+
+def format_rdiv(dval, wval):
+    def _build(val):
+        if val == "Bull":
+            return '<span style="color:#fff;font-weight:bold;">Y (<span style="color:#37F553;">B</span>)</span>'
+        elif val == "Bear":
+            return '<span style="color:#fff;font-weight:bold;">Y (<span style="color:#FF3A3A;">B</span>)</span>'
+        else:
+            return '<span style="color:#fff;">N</span>'
+    return f'<span style="color:#fff; font-weight:700;">RDiv:</span> D - {_build(dval)} | W {_build(wval)}'
+
 
 warnings.filterwarnings("ignore")
 class suppress_stdout_stderr(object):
@@ -150,6 +184,15 @@ def fetch_ohlcv(ticker):
     df_d = df_d[~((df_d['Open'] == df_d['High']) & (df_d['High'] == df_d['Low']) & (df_d['Low'] == df_d['Close']))]
     return df_d
 
+# Stochastic TradingView-matching (5,3,3)
+def compute_stochastic(df, k_period=5, d_period=3, smooth_k=3):
+    low_min = df['Low'].rolling(window=k_period, min_periods=k_period).min()
+    high_max = df['High'].rolling(window=k_period, min_periods=k_period).max()
+    raw_k = 100 * (df['Close'] - low_min) / (high_max - low_min)
+    k = raw_k.rolling(window=smooth_k, min_periods=smooth_k).mean()
+    d = k.rolling(window=d_period, min_periods=d_period).mean()
+    return k, d
+
 def ema50_comparison_row(ema50, sma20, section_type):
     if section_type == 'long':
         if ema50 > sma20:
@@ -229,6 +272,12 @@ def analyze_sma20_long(ticker, name, lot):
         st_series, st_dir = supertrend_tradingview_wilder(df_d, period=10, multiplier=3.0)
         if st_series is None:
             return None
+        # ---- ADD SHR calculation ----
+        stoch_k, stoch_d = compute_stochastic(df_d, k_period=5, d_period=3, smooth_k=3)
+        shr_k_val = round(stoch_k.iloc[-1], 2) if stoch_k is not None else "NA"
+        shr_d_val = round(stoch_d.iloc[-1], 2) if stoch_d is not None else "NA"
+        shr_dot = '<span style="color:#37F553;font-size:1.23em">&#x25CF;</span>' if shr_k_val >= shr_d_val else '<span style="color:#FF3A3A;font-size:1.23em">&#x25CF;</span>'
+        # ----------------------------
         close_now = to_float(df_d['Close'].iloc[-1])
         close_prev = to_float(df_d['Close'].iloc[-2])
         sma_now = to_float(df_d['SMA20'].iloc[-1])
@@ -263,6 +312,9 @@ def analyze_sma20_long(ticker, name, lot):
                 'ATR14': round(last_atr14, 2),
                 'Daily_RSI': round(daily_rsi,2) if isinstance(daily_rsi, float) else daily_rsi,
                 'OBV_ARROW': obv_trend_arrow(df_d, 10),
+                'SHR_DOT': shr_dot,
+                'SHR_K': shr_k_val,
+                'SHR_D': shr_d_val
             }
         return None
     except:
@@ -277,6 +329,12 @@ def analyze_sma20_short(ticker, name, lot):
         st_series, st_dir = supertrend_tradingview_wilder(df_d, period=10, multiplier=3.0)
         if st_series is None:
             return None
+        # ---- ADD SHR calculation ----
+        stoch_k, stoch_d = compute_stochastic(df_d, k_period=5, d_period=3, smooth_k=3)
+        shr_k_val = round(stoch_k.iloc[-1], 2) if stoch_k is not None else "NA"
+        shr_d_val = round(stoch_d.iloc[-1], 2) if stoch_d is not None else "NA"
+        shr_dot = '<span style="color:#37F553;font-size:1.23em">&#x25CF;</span>' if shr_k_val >= shr_d_val else '<span style="color:#FF3A3A;font-size:1.23em">&#x25CF;</span>'
+        # ----------------------------
         close_now = to_float(df_d['Close'].iloc[-1])
         close_prev = to_float(df_d['Close'].iloc[-2])
         sma_now = to_float(df_d['SMA20'].iloc[-1])
@@ -311,6 +369,9 @@ def analyze_sma20_short(ticker, name, lot):
                 'ATR14': round(last_atr14, 2),
                 'Daily_RSI': round(daily_rsi,2) if isinstance(daily_rsi, float) else daily_rsi,
                 'OBV_ARROW': obv_trend_arrow(df_d, 10),
+                'SHR_DOT': shr_dot,
+                'SHR_K': shr_k_val,
+                'SHR_D': shr_d_val
             }
         return None
     except:
@@ -332,7 +393,6 @@ def get_sma20_crossover_data():
             short_results.append(short_res)
     return long_results, short_results
 
-# ------ Correct M & W logic using LAST daily close compared to last SMA20 in monthly/weekly ------
 def get_above_sma_labels(ticker):
     try:
         df_d = fetch_ohlcv(ticker)
@@ -373,7 +433,6 @@ def just_above_below_dashboard():
     st.markdown("<h2 style='font-size:1.30em; text-align:center; margin-bottom:10px;color:#FFD700;'>Just Above/Below</h2>", unsafe_allow_html=True)
     if st.button("🔄 Refresh Data", key="refresh_sma20"):
         get_sma20_crossover_data.clear()
-
     long_results, short_results = get_sma20_crossover_data()
 
     cols = st.columns(2)
@@ -412,6 +471,9 @@ def just_above_below_dashboard():
                 supertrend_val = s.get('SuperTrend', 'NA')
                 supertrend_dir = s.get('SuperTrendDir','NA')
                 obv_arrow = s.get('OBV_ARROW', '')
+                # ---- SHR info for tile ----
+                shr_html = f'<span style="font-weight:700;">SHR:</span> {s.get("SHR_DOT","")} <span style="color:#37F553;font-weight:700;">{s.get("SHR_K","")}</span> / <span style="color:#FFD700;font-weight:700;">{s.get("SHR_D","")}</span>'
+                # ---------------------------
 
                 section_type = 'long' if idx == 0 else 'short'
                 ema_comp_html = ema50_comparison_row(ema50_val, d_val, section_type)
@@ -451,6 +513,19 @@ def just_above_below_dashboard():
                     f"RSI: {daily_rsi_html}",
                     f"OBV: {obv_arrow}",
                 ]
+                left_rows.append(shr_html)   # <-- SHR ONLY on left side
+
+                # === Divergence calculation must happen here ===
+                try:
+                    df_d = fetch_ohlcv(symbol)
+                    df_d['RSI'] = ta.momentum.RSIIndicator(df_d['Close'], 14).rsi()
+                    rsi_div_d = detect_rsi_divergence(df_d, lookback=14)
+                    df_w = df_d.resample('W-FRI').last().dropna().copy()
+                    df_w['RSI'] = ta.momentum.RSIIndicator(df_w['Close'], 14).rsi()
+                    rsi_div_w = detect_rsi_divergence(df_w, lookback=14)
+                except Exception:
+                    rsi_div_d, rsi_div_w = None, None
+                rdiv_html = format_rdiv(rsi_div_d, rsi_div_w)
 
                 right_rows = [
                     f"ATR: <b>{s.get('ATR14','')}</b>",
@@ -458,14 +533,15 @@ def just_above_below_dashboard():
                     f"Signal: <span style='color:#FFA500;font-weight:700;'>{macd_signal}</span>",
                     two_percent_label(ema50_val, d_val, section_type),
                     gap_label,
-                    mw_label
+                    mw_label,     # MW label
+                    rdiv_html     # RDiv label now appears immediately under MW
                 ]
 
                 left_html = "".join([f"<div style='font-size:1.03em;color:#ECECEC;margin-bottom:2px;'>{row}</div>" for row in left_rows])
                 right_html = "".join([f"<div style='font-size:1.03em;margin-bottom:2px;'>{row}</div>" for row in right_rows])
 
                 tcol.markdown(f"""
-                <div style="background:#252525;border-radius:16px;width:340px;height:300px;position:relative;box-shadow:1px 2px 10px #111;margin-bottom:20px;display:flex;flex-direction:column;align-items:center;border:1px solid #333;">
+                <div style="background:#252525;border-radius:16px;width:340px;height:320px;position:relative;box-shadow:1px 2px 10px #111;margin-bottom:20px;display:flex;flex-direction:column;align-items:center;border:1px solid #333;">
                   <div style="width:100%;text-align:center;margin-top:8px;">
                     <a href="{tview_url}" target="_blank" style="color:#fff;font-size:1.15em;font-weight:700;text-decoration:none;">
                       {name}
