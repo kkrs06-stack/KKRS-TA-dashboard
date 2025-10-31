@@ -98,6 +98,32 @@ def get_weekly_20_sma(df_d):
     df_w['SMA20W'] = df_w['Close'].rolling(20).mean()
     return to_float(df_w['SMA20W'].iloc[-1]) if len(df_w['SMA20W']) >= 1 else np.nan
 
+def get_above_sma_labels(ticker):
+    try:
+        df_d = fetch_ohlcv(ticker)
+        last_close = df_d['Close'].iloc[-1]
+        # Monthly
+        df_m = df_d['Close'].resample('M').last().dropna().to_frame()
+        df_m['SMA20'] = df_m['Close'].rolling(20).mean()
+        sma20_m = df_m['SMA20'].iloc[-1] if len(df_m) >= 20 else np.nan
+        if not np.isnan(sma20_m):
+            m_yn = last_close > sma20_m
+            m_val = f"<span style='color:{'#37F553' if m_yn else '#FF3A3A'};font-weight:bold;'>M: {'Y' if m_yn else 'N'}</span>"
+        else:
+            m_val = "<span style='color:#FFD700;'>M: -</span>"
+        # Weekly
+        df_w = df_d['Close'].resample('W-FRI').last().dropna().to_frame()
+        df_w['SMA20'] = df_w['Close'].rolling(20).mean()
+        sma20_w = df_w['SMA20'].iloc[-1] if len(df_w) >= 20 else np.nan
+        if not np.isnan(sma20_w):
+            w_yn = last_close > sma20_w
+            w_val = f"<span style='color:{'#37F553' if w_yn else '#FF3A3A'};font-weight:bold;'>W: {'Y' if w_yn else 'N'}</span>"
+        else:
+            w_val = "<span style='color:#FFD700;'>W: -</span>"
+        return f"{m_val} | {w_val}"
+    except:
+        return "<span style='color:#FFD700;'>M: - | W: -</span>"
+
 def analyze_ticker_long(ticker, name, lot):
     try:
         df_d = fetch_ohlcv(ticker)
@@ -251,6 +277,7 @@ def daily_weekly_dashboard():
                 tv_url = f"https://www.tradingview.com/chart/lDI0poON/?symbol=NSE:{symbol.replace('.NS','')}"
                 daily_rsi_val = s.get('Daily_RSI','NA')
                 daily_rsi = rsi_colored(daily_rsi_val)
+                mw_label = get_above_sma_labels(symbol) # <<< MW helper
                 if idx == 0:
                     left_rows = [
                         f"D: <b>{d}</b>",
@@ -269,6 +296,7 @@ def daily_weekly_dashboard():
                     f"ATR: <b>{s.get('ATR14','')}</b>",
                     f"MACD: <span style='color:#FFD700;font-weight:700;'>{s.get('MACD','')}</span>",
                     f"Signal: <span style='color:#FFA500;font-weight:700;'>{s.get('MACD_signal','')}</span>",
+                    mw_label                # <--- MW label directly under Signal
                 ]
                 tcol.markdown(f"""
                 <div style="background:#252525;border-radius:16px;width:340px;height:245px;position:relative;box-shadow:1px 2px 10px #111;margin-bottom:20px;display:flex;flex-direction:column;align-items:center;border:1px solid #333;">
@@ -298,6 +326,7 @@ def daily_weekly_dashboard():
                         <div style="font-size:1.03em;color:#FFD700;margin-bottom:2px;">{right_rows[0]}</div>
                         <div style="font-size:1.03em;color:#FFD700;margin-bottom:2px;">{right_rows[1]}</div>
                         <div style="font-size:1.03em;color:#FFA500;margin-bottom:2px;">{right_rows[2]}</div>
+                        <div style="font-size:1.03em;margin-bottom:2px;">{right_rows[3]}</div>
                     </div>
                   </div>
                   <div style="position:absolute;bottom:8px;width:100%;text-align:center;">
