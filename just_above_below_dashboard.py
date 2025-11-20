@@ -11,6 +11,9 @@ from ta.trend import ADXIndicator
 from ta.volatility import AverageTrueRange
 import scipy.signal
 
+# ========== Helper Functions ==========
+warnings.filterwarnings("ignore")
+
 def detect_rsi_divergence(df, rsi_col='RSI', lookback=14):
     price = df['Close']
     rsi = df[rsi_col]
@@ -42,20 +45,6 @@ def format_rdiv(dval, wval):
         else:
             return '<span style="color:#fff;">N</span>'
     return f'<span style="color:#fff; font-weight:700;">RDiv:</span> D - {_build(dval)} | W {_build(wval)}'
-
-
-warnings.filterwarnings("ignore")
-class suppress_stdout_stderr(object):
-    def __enter__(self):
-        self.old_stdout = sys.stdout
-        self.old_stderr = sys.stderr
-        sys.stdout = open(os.devnull, 'w')
-        sys.stderr = open(os.devnull, 'w')
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout.close()
-        sys.stderr.close()
-        sys.stdout = self.old_stdout
-        sys.stderr = self.old_stderr
 
 def get_first_two(text):
     return " ".join(str(text).split()[:2])
@@ -173,18 +162,6 @@ def to_float(val):
     except:
         return np.nan
 
-def fetch_ohlcv(ticker):
-    df_d = yf.download(ticker, period='500d', interval='1d', progress=False)
-    if isinstance(df_d.columns, pd.MultiIndex):
-        df_d.columns = [col[0] for col in df_d.columns]
-    df_d = df_d.dropna(subset=['High', 'Low', 'Close', 'Volume'])
-    df_d = df_d[~df_d.index.duplicated(keep='first')]
-    if 'Volume' in df_d.columns:
-        df_d = df_d[df_d['Volume'] > 0]
-    df_d = df_d[~((df_d['Open'] == df_d['High']) & (df_d['High'] == df_d['Low']) & (df_d['Low'] == df_d['Close']))]
-    return df_d
-
-# Stochastic TradingView-matching (5,3,3)
 def compute_stochastic(df, k_period=5, d_period=3, smooth_k=3):
     low_min = df['Low'].rolling(window=k_period, min_periods=k_period).min()
     high_max = df['High'].rolling(window=k_period, min_periods=k_period).max()
@@ -263,40 +240,65 @@ def calc_indicators(df_d):
     df_d['ATR14'] = atr.average_true_range()
     return df_d
 
-def analyze_sma20_long(ticker, name, lot):
+@st.cache_data(show_spinner="Downloading all symbol data (batched)...")
+def fetch_all_ohlcv(ticker_list):
+    tickers_str = " ".join(ticker_list)
+    df = yf.download(tickers=tickers_str, period='500d', interval='1d', group_by='ticker', auto_adjust=True, progress=False, threads=True)
+    data_dict = {}
+    if isinstance(df.columns, pd.MultiIndex):
+        for symbol in ticker_list:
+            if symbol in df:
+                sdf = df[symbol].dropna()
+                sdf = sdf[~sdf.index.duplicated(keep='first')]
+                if 'Volume' in sdf.columns:
+                    sdf = sdf[sdf['Volume'] > 0]
+                sdf = sdf[~((sdf['Open'] == sdf['High']) & (sdf['High'] == sdf['Low']) & (sdf['Low'] == sdf['Close']))]
+                data_dict[symbol] = sdf
+    else:
+        sdf = df.dropna()
+        sdf = sdf[~sdf.index.duplicated(keep='first')]
+        data_dict[ticker_list[0]] = sdf
+    return data_dict
+
+def process_fo_stock_list():
     try:
-        df_d = fetch_ohlcv(ticker)
-        if df_d.shape[0] < 60:
-            return None
+        fo_df = pd.read_csv('fo_stock_list.csv')
+    except Exception:
+        st.error('Could not read fo_stock_list.csv')
+        return pd.DataFrame()
+    return fo_df
+
+@st.cache_data(show_spinner="Calculating indicator tiles...")
+def batch_analyze_all(data_dict, fo_df):
+    long_results, short_results = [], []
+    for idx, row in fo_df.iterrows():
+        symbol = row['symbol']
+        lot = row['lot_size'] if 'lot_size' in row else ''
+        name = get_first_two(row['name']) if 'name' in row else symbol
+        df_d = data_dict.get(symbol)
+        if df_d is None or df_d.shape[0] < 60:
+            continue
         df_d = calc_indicators(df_d)
         st_series, st_dir = supertrend_tradingview_wilder(df_d, period=10, multiplier=3.0)
-        if st_series is None:
-            return None
-        # ---- ADD SHR calculation ----
         stoch_k, stoch_d = compute_stochastic(df_d, k_period=5, d_period=3, smooth_k=3)
         shr_k_val = round(stoch_k.iloc[-1], 2) if stoch_k is not None else "NA"
         shr_d_val = round(stoch_d.iloc[-1], 2) if stoch_d is not None else "NA"
-        shr_dot = '<span style="color:#37F553;font-size:1.23em">&#x25CF;</span>' if shr_k_val >= shr_d_val else '<span style="color:#FF3A3A;font-size:1.23em">&#x25CF;</span>'
-        # ----------------------------
+        shr_dot = '<span style="color:#37F553;font-size:1.23em">&#x25CF;</span>' if (shr_k_val != "NA" and shr_k_val >= shr_d_val) else '<span style="color:#FF3A3A;font-size:1.23em">&#x25CF;</span>'
         close_now = to_float(df_d['Close'].iloc[-1])
         close_prev = to_float(df_d['Close'].iloc[-2])
         sma_now = to_float(df_d['SMA20'].iloc[-1])
         sma_prev = to_float(df_d['SMA20'].iloc[-2])
         ema_now = to_float(df_d['EMA50'].iloc[-1])
-        supertrend_val = st_series.iloc[-1]
-        supertrend_dir = st_dir[-1]
+        if st_series is not None:
+            supertrend_val = st_series.iloc[-1]
+            supertrend_dir = st_dir[-1]
+        else:
+            supertrend_val, supertrend_dir = "NA", "NA"
         cond_cross_above = (close_now > sma_now) and (close_prev <= sma_prev)
         if cond_cross_above:
-            last_adx14 = to_float(df_d['ADX14'].iloc[-1])
-            last_di_pos = to_float(df_d['DI+'].iloc[-1])
-            last_di_neg = to_float(df_d['DI-'].iloc[-1])
-            last_macd = to_float(df_d['MACD'].iloc[-1])
-            last_macd_signal = to_float(df_d['MACD_signal'].iloc[-1])
-            last_atr14 = to_float(df_d['ATR14'].iloc[-1])
-            daily_rsi = ta.momentum.RSIIndicator(df_d['Close'], window=14).rsi().dropna().iloc[-1] if df_d['Close'].dropna().size > 15 else "NA"
-            return {
+            long_results.append({
                 'Name': name,
-                'Symbol': ticker,
+                'Symbol': symbol,
                 'Lot': lot,
                 'D': round(sma_now, 2),
                 'EMA50': round(ema_now, 2),
@@ -304,56 +306,23 @@ def analyze_sma20_long(ticker, name, lot):
                 'SuperTrendDir': supertrend_dir,
                 'Close': round(close_now,2),
                 'PrevClose': round(close_prev,2),
-                'ADX14': round(last_adx14, 2),
-                'DI+': round(last_di_pos, 2),
-                'DI-': round(last_di_neg, 2),
-                'MACD': round(last_macd, 2),
-                'MACD_signal': round(last_macd_signal, 2),
-                'ATR14': round(last_atr14, 2),
-                'Daily_RSI': round(daily_rsi,2) if isinstance(daily_rsi, float) else daily_rsi,
+                'ADX14': round(to_float(df_d['ADX14'].iloc[-1]), 2),
+                'DI+': round(to_float(df_d['DI+'].iloc[-1]), 2),
+                'DI-': round(to_float(df_d['DI-'].iloc[-1]), 2),
+                'MACD': round(to_float(df_d['MACD'].iloc[-1]), 2),
+                'MACD_signal': round(to_float(df_d['MACD_signal'].iloc[-1]), 2),
+                'ATR14': round(to_float(df_d['ATR14'].iloc[-1]), 2),
+                'Daily_RSI': round(to_float(ta.momentum.RSIIndicator(df_d['Close'], window=14).rsi().iloc[-1]),2),
                 'OBV_ARROW': obv_trend_arrow(df_d, 10),
                 'SHR_DOT': shr_dot,
                 'SHR_K': shr_k_val,
                 'SHR_D': shr_d_val
-            }
-        return None
-    except:
-        return None
-
-def analyze_sma20_short(ticker, name, lot):
-    try:
-        df_d = fetch_ohlcv(ticker)
-        if df_d.shape[0] < 60:
-            return None
-        df_d = calc_indicators(df_d)
-        st_series, st_dir = supertrend_tradingview_wilder(df_d, period=10, multiplier=3.0)
-        if st_series is None:
-            return None
-        # ---- ADD SHR calculation ----
-        stoch_k, stoch_d = compute_stochastic(df_d, k_period=5, d_period=3, smooth_k=3)
-        shr_k_val = round(stoch_k.iloc[-1], 2) if stoch_k is not None else "NA"
-        shr_d_val = round(stoch_d.iloc[-1], 2) if stoch_d is not None else "NA"
-        shr_dot = '<span style="color:#37F553;font-size:1.23em">&#x25CF;</span>' if shr_k_val >= shr_d_val else '<span style="color:#FF3A3A;font-size:1.23em">&#x25CF;</span>'
-        # ----------------------------
-        close_now = to_float(df_d['Close'].iloc[-1])
-        close_prev = to_float(df_d['Close'].iloc[-2])
-        sma_now = to_float(df_d['SMA20'].iloc[-1])
-        sma_prev = to_float(df_d['SMA20'].iloc[-2])
-        ema_now = to_float(df_d['EMA50'].iloc[-1])
-        supertrend_val = st_series.iloc[-1]
-        supertrend_dir = st_dir[-1]
+            })
         cond_cross_below = (close_now < sma_now) and (close_prev >= sma_prev)
         if cond_cross_below:
-            last_adx14 = to_float(df_d['ADX14'].iloc[-1])
-            last_di_pos = to_float(df_d['DI+'].iloc[-1])
-            last_di_neg = to_float(df_d['DI-'].iloc[-1])
-            last_macd = to_float(df_d['MACD'].iloc[-1])
-            last_macd_signal = to_float(df_d['MACD_signal'].iloc[-1])
-            last_atr14 = to_float(df_d['ATR14'].iloc[-1])
-            daily_rsi = ta.momentum.RSIIndicator(df_d['Close'], window=14).rsi().dropna().iloc[-1] if df_d['Close'].dropna().size > 15 else "NA"
-            return {
+            short_results.append({
                 'Name': name,
-                'Symbol': ticker,
+                'Symbol': symbol,
                 'Lot': lot,
                 'D': round(sma_now, 2),
                 'EMA50': round(ema_now, 2),
@@ -361,43 +330,26 @@ def analyze_sma20_short(ticker, name, lot):
                 'SuperTrendDir': supertrend_dir,
                 'Close': round(close_now, 2),
                 'PrevClose': round(close_prev, 2),
-                'ADX14': round(last_adx14, 2),
-                'DI+': round(last_di_pos, 2),
-                'DI-': round(last_di_neg, 2),
-                'MACD': round(last_macd, 2),
-                'MACD_signal': round(last_macd_signal, 2),
-                'ATR14': round(last_atr14, 2),
-                'Daily_RSI': round(daily_rsi,2) if isinstance(daily_rsi, float) else daily_rsi,
+                'ADX14': round(to_float(df_d['ADX14'].iloc[-1]), 2),
+                'DI+': round(to_float(df_d['DI+'].iloc[-1]), 2),
+                'DI-': round(to_float(df_d['DI-'].iloc[-1]), 2),
+                'MACD': round(to_float(df_d['MACD'].iloc[-1]), 2),
+                'MACD_signal': round(to_float(df_d['MACD_signal'].iloc[-1]), 2),
+                'ATR14': round(to_float(df_d['ATR14'].iloc[-1]), 2),
+                'Daily_RSI': round(to_float(ta.momentum.RSIIndicator(df_d['Close'], window=14).rsi().iloc[-1]),2),
                 'OBV_ARROW': obv_trend_arrow(df_d, 10),
                 'SHR_DOT': shr_dot,
                 'SHR_K': shr_k_val,
                 'SHR_D': shr_d_val
-            }
-        return None
-    except:
-        return None
-
-@st.cache_data(show_spinner="Loading data for Just Above/Below...")
-def get_sma20_crossover_data():
-    fo_df = pd.read_csv('fo_stock_list.csv')
-    long_results, short_results = [], []
-    for idx, row in fo_df.iterrows():
-        symbol = row['symbol']
-        lot = row['lot_size'] if 'lot_size' in row else ''
-        name = get_first_two(row['name']) if 'name' in row else symbol
-        long_res = analyze_sma20_long(symbol, name, lot)
-        if long_res:
-            long_results.append(long_res)
-        short_res = analyze_sma20_short(symbol, name, lot)
-        if short_res:
-            short_results.append(short_res)
+            })
     return long_results, short_results
 
-def get_above_sma_labels(ticker):
+def get_above_sma_labels(symbol, data_dict):
     try:
-        df_d = fetch_ohlcv(ticker)
+        df_d = data_dict.get(symbol)
+        if df_d is None:
+            return "<span style='color:#FFD700;'>M: - | W: -</span>"
         last_close = df_d['Close'].iloc[-1]
-        # Monthly
         df_m = df_d['Close'].resample('M').last().dropna().to_frame()
         df_m['SMA20'] = df_m['Close'].rolling(20).mean()
         sma20_m = df_m['SMA20'].iloc[-1] if len(df_m) >= 20 else np.nan
@@ -406,7 +358,6 @@ def get_above_sma_labels(ticker):
             m_val = f"<span style='color:{'#37F553' if m_yn else '#FF3A3A'};font-weight:bold;'>M: {'Y' if m_yn else 'N'}</span>"
         else:
             m_val = "<span style='color:#FFD700;'>M: -</span>"
-        # Weekly
         df_w = df_d['Close'].resample('W-FRI').last().dropna().to_frame()
         df_w['SMA20'] = df_w['Close'].rolling(20).mean()
         sma20_w = df_w['SMA20'].iloc[-1] if len(df_w) >= 20 else np.nan
@@ -427,14 +378,17 @@ def just_above_below_dashboard():
     st.markdown(
         f"<div style='text-align:right;font-size:1.2em;color:#FFD700;font-weight:700;padding-top:4px;'>{today_str}</div>",
         unsafe_allow_html=True)
-
     obv_period = st.slider('OBV Trend Lookback Period (days)', min_value=5, max_value=30, value=10, step=1)
-
     st.markdown("<h2 style='font-size:1.30em; text-align:center; margin-bottom:10px;color:#FFD700;'>Just Above/Below</h2>", unsafe_allow_html=True)
     if st.button("🔄 Refresh Data", key="refresh_sma20"):
-        get_sma20_crossover_data.clear()
-    long_results, short_results = get_sma20_crossover_data()
-
+        fetch_all_ohlcv.clear()
+        batch_analyze_all.clear()
+    fo_df = process_fo_stock_list()
+    if fo_df.empty:
+        return
+    ticker_list = list(fo_df['symbol'])
+    data_dict = fetch_all_ohlcv(ticker_list)
+    long_results, short_results = batch_analyze_all(data_dict, fo_df)
     cols = st.columns(2)
     section_titles = ["Long", "Short"]
     section_colors = ["#18AA47", "#E53935"]
@@ -471,16 +425,12 @@ def just_above_below_dashboard():
                 supertrend_val = s.get('SuperTrend', 'NA')
                 supertrend_dir = s.get('SuperTrendDir','NA')
                 obv_arrow = s.get('OBV_ARROW', '')
-                # ---- SHR info for tile ----
                 shr_html = f'<span style="font-weight:700;">SHR:</span> {s.get("SHR_DOT","")} <span style="color:#37F553;font-weight:700;">{s.get("SHR_K","")}</span> / <span style="color:#FFD700;font-weight:700;">{s.get("SHR_D","")}</span>'
-                # ---------------------------
-
                 section_type = 'long' if idx == 0 else 'short'
                 ema_comp_html = ema50_comparison_row(ema50_val, d_val, section_type)
                 macd_color = "#37F553" if macd > macd_signal else "#FF3A3A"
                 gap_label = gap_ema50_label(price, ema50_val, d_val, section_type)
-                mw_label = get_above_sma_labels(symbol)
-
+                mw_label = get_above_sma_labels(symbol, data_dict)
                 if supertrend_dir == "UP":
                     st_dir_col = "#37F553"
                 elif supertrend_dir == "DOWN":
@@ -488,7 +438,6 @@ def just_above_below_dashboard():
                 else:
                     st_dir_col = "#FFD700"
                 supertrend_html = f"ST: <b>{supertrend_val}</b> <span style='color:{st_dir_col};font-weight:900;font-size:1.12em'>{supertrend_dir}</span>"
-
                 di_plus_html = f"<span style='color:#18AA47;font-size:1em;'>DI+ {di_plus}</span>"
                 di_minus_html = f"<span style='color:#E53935;font-size:1em;'>DI- {di_minus}</span>"
                 if idx == 0:
@@ -503,9 +452,7 @@ def just_above_below_dashboard():
                             di_minus_html = f"<span style='color:#E53935;font-size:1.22em;font-weight:900;'>DI- {di_minus}</span>"
                         if di_minus > 20 and di_plus < 20:
                             di_minus_html = f"<span style='color:#E53935;font-size:1.22em;font-weight:900;'>DI- {di_minus}</span>"
-
                 tview_url = f"https://www.tradingview.com/chart/lDI0poON/?symbol=NSE:{symbol.replace('.NS','')}"
-
                 left_rows = [
                     f"D: <b>{d_val}</b>",
                     ema_comp_html,
@@ -513,11 +460,9 @@ def just_above_below_dashboard():
                     f"RSI: {daily_rsi_html}",
                     f"OBV: {obv_arrow}",
                 ]
-                left_rows.append(shr_html)   # <-- SHR ONLY on left side
-
-                # === Divergence calculation must happen here ===
+                left_rows.append(shr_html)
                 try:
-                    df_d = fetch_ohlcv(symbol)
+                    df_d = data_dict.get(symbol)
                     df_d['RSI'] = ta.momentum.RSIIndicator(df_d['Close'], 14).rsi()
                     rsi_div_d = detect_rsi_divergence(df_d, lookback=14)
                     df_w = df_d.resample('W-FRI').last().dropna().copy()
@@ -526,20 +471,17 @@ def just_above_below_dashboard():
                 except Exception:
                     rsi_div_d, rsi_div_w = None, None
                 rdiv_html = format_rdiv(rsi_div_d, rsi_div_w)
-
                 right_rows = [
                     f"ATR: <b>{s.get('ATR14','')}</b>",
                     f"MACD: <span style='color:{macd_color};font-weight:700;'>{macd}</span>",
                     f"Signal: <span style='color:#FFA500;font-weight:700;'>{macd_signal}</span>",
                     two_percent_label(ema50_val, d_val, section_type),
                     gap_label,
-                    mw_label,     # MW label
-                    rdiv_html     # RDiv label now appears immediately under MW
+                    mw_label,
+                    rdiv_html
                 ]
-
                 left_html = "".join([f"<div style='font-size:1.03em;color:#ECECEC;margin-bottom:2px;'>{row}</div>" for row in left_rows])
                 right_html = "".join([f"<div style='font-size:1.03em;margin-bottom:2px;'>{row}</div>" for row in right_rows])
-
                 tcol.markdown(f"""
                 <div style="background:#252525;border-radius:16px;width:340px;height:320px;position:relative;box-shadow:1px 2px 10px #111;margin-bottom:20px;display:flex;flex-direction:column;align-items:center;border:1px solid #333;">
                   <div style="width:100%;text-align:center;margin-top:8px;">
@@ -576,3 +518,10 @@ def just_above_below_dashboard():
                 """, unsafe_allow_html=True)
         if not tiles:
             col.write("No stocks matched.")
+
+# No function named get_sma20_crossover_data exists or is exported—just above_below_dashboard is your public function.
+
+# ========== RUN DASHBOARD ==========
+
+if __name__ == "__main__":
+    just_above_below_dashboard()
