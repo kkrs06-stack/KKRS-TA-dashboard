@@ -10,8 +10,8 @@ import os
 from ta.trend import ADXIndicator, MACD
 from ta.volatility import AverageTrueRange
 
-# --- Import modular dashboard functions (including new SS Strat) ---
-from just_above_below_dashboard import just_above_below_dashboard, get_sma20_crossover_data
+# --- Import modular dashboard functions for other tabs (already optimized) ---
+from just_above_below_dashboard import just_above_below_dashboard, fetch_all_ohlcv, batch_analyze_all
 from daily_weekly_dashboard import daily_weekly_dashboard
 from ss_strat_dashboard import ss_strat_dashboard, get_ssstrat_stock_data
 
@@ -41,71 +41,55 @@ STRATEGIES = [
     {"label": "Custom Watchlist", "id": "custom"},
 ]
 
-# ---- All cache-decorated functions are defined/imported above ----
-@st.cache_data(show_spinner="Loading data for RSI Strategy...")
-def get_rsi_strategy_data():
-    fo_stocks = pd.read_csv("fo_stock_list.csv").to_dict(orient="records")
-    results = []
-    for stock in fo_stocks:
-        symbol = stock["symbol"].strip().upper()
-        try:
-            with suppress_stdout_stderr():
-                data = yf.download(
-                    symbol, period="120d", interval="1d", progress=False, group_by='column'
-                )
-            if isinstance(data.columns, pd.MultiIndex):
-                close = data[('Close', symbol)]
-            else:
-                close = data['Close']
-            price = None
-            rsi = None
-            prev_price = None
-            if (not data.empty) and (close.count() >= 15):
-                rsi_series = ta.momentum.RSIIndicator(close, window=14).rsi()
-                try:
-                    last_valid_close = close.dropna().iloc[-1]
-                    price = float(last_valid_close)
-                except Exception:
-                    price = None
-                try:
-                    prev_valid_close = close.dropna().iloc[-2] if close.dropna().size > 1 else price
-                    prev_price = float(prev_valid_close)
-                except Exception:
-                    prev_price = price
-                try:
-                    last_valid_rsi = rsi_series.dropna().iloc[-1]
-                    rsi = float(last_valid_rsi)
-                except Exception:
-                    rsi = None
-            results.append({
-                "Stock Name": stock["name"],
-                "Symbol": symbol,
-                "Lot Size": stock["lot_size"],
-                "Latest Price": price,
-                "Previous Price": prev_price,
-                "Daily RSI": rsi,
-            })
-        except Exception:
-            results.append({
-                "Stock Name": stock["name"],
-                "Symbol": symbol,
-                "Lot Size": stock["lot_size"],
-                "Latest Price": None,
-                "Previous Price": None,
-                "Daily RSI": None,
-            })
-    df = pd.DataFrame(results)
-    df["Latest Price"] = pd.to_numeric(df["Latest Price"], errors="coerce")
-    df["Previous Price"] = pd.to_numeric(df["Previous Price"], errors="coerce")
-    df["Daily RSI"] = pd.to_numeric(df["Daily RSI"], errors="coerce")
-    return df
+# ----------- OPTIMIZED RSI TAB: batch + cache ----------- #
+@st.cache_data(show_spinner="Batch downloading RSI data for all F&O stocks...")
+def get_rsi_strategy_data_optimized():
+    fo_df = pd.read_csv("fo_stock_list.csv")
+    tickers = fo_df["symbol"].str.strip().str.upper().tolist()
+    ticker_name_map = dict(zip(fo_df["symbol"].str.strip().str.upper(), fo_df["name"]))
+    lot_size_map = dict(zip(fo_df["symbol"].str.strip().str.upper(), fo_df["lot_size"]))
 
-# ------------- DEFINE CACHE CLEAR FUNCTION -------------
+    df = yf.download(
+        tickers=" ".join(tickers),
+        period="120d",
+        interval="1d",
+        group_by='ticker',
+        progress=False,
+        auto_adjust=True,
+        threads=True
+    )
+
+    results = []
+    for symbol in tickers:
+        try:
+            d = df[symbol] if isinstance(df.columns, pd.MultiIndex) else df
+            close = d["Close"].dropna() if "Close" in d else pd.Series([])
+            price = close.iloc[-1] if len(close) > 0 else None
+            prev_price = close.iloc[-2] if len(close) > 1 else price
+            rsi = ta.momentum.RSIIndicator(close, window=14).rsi().dropna().iloc[-1] if len(close) > 15 else None
+        except Exception:
+            price, prev_price, rsi = None, None, None
+        results.append({
+            "Stock Name": ticker_name_map.get(symbol, symbol),
+            "Symbol": symbol,
+            "Lot Size": lot_size_map.get(symbol, ""),
+            "Latest Price": price,
+            "Previous Price": prev_price,
+            "Daily RSI": rsi,
+        })
+    df_out = pd.DataFrame(results)
+    df_out["Latest Price"] = pd.to_numeric(df_out["Latest Price"], errors="coerce")
+    df_out["Previous Price"] = pd.to_numeric(df_out["Previous Price"], errors="coerce")
+    df_out["Daily RSI"] = pd.to_numeric(df_out["Daily RSI"], errors="coerce")
+    return df_out
+
+# ------------- CACHE CLEAR FUNCTION -------------
 def clear_all_app_cache():
-    get_rsi_strategy_data.clear()
+    get_rsi_strategy_data_optimized.clear()
     get_ssstrat_stock_data.clear()
-    get_sma20_crossover_data.clear()
-    # Add other .clear() for cached tab functions if you have any
+    fetch_all_ohlcv.clear()
+    batch_analyze_all.clear()
+    # Add other .clear() for cached tab functions if needed
 
 # ---- CLEAR ON FIRST LOAD ----
 if "cache_cleared_initial" not in st.session_state:
@@ -203,8 +187,9 @@ def to_float(val):
 # -------------- DASHBOARD TABS --------------
 if selected == "rsi":
     if st.button("🔄 Refresh RSI Data", key="refresh_rsi"):
-        get_rsi_strategy_data.clear()
-    df = get_rsi_strategy_data()
+        get_rsi_strategy_data_optimized.clear()
+        st.rerun()
+    df = get_rsi_strategy_data_optimized()
     search_cols = st.columns([7, 1])
     search_cols[0].markdown(
         "<div style='font-size:1.12em;font-weight: bold; color:#FFD700; padding-bottom:3px'>Search Stock Name</div>", unsafe_allow_html=True
