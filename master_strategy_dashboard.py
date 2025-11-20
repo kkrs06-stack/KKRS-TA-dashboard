@@ -13,7 +13,8 @@ from ta.volatility import AverageTrueRange
 # --- Import modular dashboard functions for other tabs (already optimized) ---
 from just_above_below_dashboard import just_above_below_dashboard, fetch_all_ohlcv, batch_analyze_all
 from daily_weekly_dashboard import daily_weekly_dashboard
-from ss_strat_dashboard import ss_strat_dashboard, get_ssstrat_stock_data
+# from ss_strat_dashboard import ss_strat_dashboard, get_ssstrat_stock_data
+from ss_strat_dashboard import ss_strat_dashboard, get_ssstrat_stock_data_optimized
 
 warnings.filterwarnings("ignore")
 
@@ -86,7 +87,7 @@ def get_rsi_strategy_data_optimized():
 # ------------- CACHE CLEAR FUNCTION -------------
 def clear_all_app_cache():
     get_rsi_strategy_data_optimized.clear()
-    get_ssstrat_stock_data.clear()
+    get_ssstrat_stock_data_optimized.clear()
     fetch_all_ohlcv.clear()
     batch_analyze_all.clear()
     # Add other .clear() for cached tab functions if needed
@@ -129,7 +130,7 @@ for i, strat in enumerate(STRATEGIES):
             st.query_params.selected_strategy = strat["id"]
             st.rerun()
 
-TRADINGVIEW_LINKS = {id: "https://www.tradingview.com/chart/lDI0poON/" for id in [s["id"] for s in STRATEGIES]}
+TRADINGVIEW_LINKS = {id: "https://www.tradingview.com/chart/HHuUSOTG/" for id in [s["id"] for s in STRATEGIES]}
 tv_chart_url = TRADINGVIEW_LINKS[selected]
 
 def get_first_two(text):
