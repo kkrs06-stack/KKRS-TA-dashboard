@@ -452,7 +452,7 @@ def just_above_below_dashboard():
                             di_minus_html = f"<span style='color:#E53935;font-size:1.22em;font-weight:900;'>DI- {di_minus}</span>"
                         if di_minus > 20 and di_plus < 20:
                             di_minus_html = f"<span style='color:#E53935;font-size:1.22em;font-weight:900;'>DI- {di_minus}</span>"
-                tview_url = f"https://www.tradingview.com/chart/lDI0poON/?symbol=NSE:{symbol.replace('.NS','')}"
+                tview_url = f"https://www.tradingview.com/chart/HHuUSOTG/?symbol=NSE:{symbol.replace('.NS','')}"
                 left_rows = [
                     f"D: <b>{d_val}</b>",
                     ema_comp_html,
