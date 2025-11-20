@@ -229,7 +229,7 @@ def daily_weekly_dashboard():
                 lot = s.get('Lot',"")
                 name = s.get('Name',"")
                 symbol = s.get('Symbol',"")
-                tv_url = f"https://www.tradingview.com/chart/lDI0poON/?symbol=NSE:{symbol.replace('.NS','')}"
+                tv_url = f"https://www.tradingview.com/chart/HHuUSOTG/?symbol=NSE:{symbol.replace('.NS','')}"
                 daily_rsi_val = s.get('Daily_RSI','NA')
                 daily_rsi = rsi_colored(daily_rsi_val)
                 mw_label = get_above_sma_labels(symbol, data_dict)
