@@ -10,13 +10,58 @@ import os
 from ta.trend import ADXIndicator, MACD
 from ta.volatility import AverageTrueRange
 
-# --- Import modular dashboard functions for other tabs (already optimized) ---
 from just_above_below_dashboard import just_above_below_dashboard, fetch_all_ohlcv, batch_analyze_all
 from daily_weekly_dashboard import daily_weekly_dashboard
-# from ss_strat_dashboard import ss_strat_dashboard, get_ssstrat_stock_data
 from ss_strat_dashboard import ss_strat_dashboard, get_ssstrat_stock_data_optimized
+from ichi import ichi_dashboard
 
 warnings.filterwarnings("ignore")
+
+# ========== Helper Functions ==========
+
+def price_arrow_and_change(price, prev_price):
+    try:
+        price = float(price)
+        prev_price = float(prev_price)
+        change = price - prev_price
+        pct = ((change) / prev_price) * 100 if prev_price else 0
+        if change > 0:
+            arrow, color = "↑", "#37F553"
+        elif change < 0:
+            arrow, color = "↓", "#FF3A3A"
+        else:
+            arrow, color = "", "#ECECEC"
+        return arrow, color, round(change,2), round(pct,2)
+    except:
+        return "", "#ECECEC", "NA", "NA"
+
+def rsi_colored(rsi):
+    try:
+        val = float(rsi)
+        if val > 55:
+            color = "#37F553"
+        elif val < 50:
+            color = "#FF3A3A"
+        else:
+            color = "#FFD700"
+        return f"<span style='color:{color};font-weight:700;'>{val:.2f}</span>"
+    except:
+        return f"<span style='color:#ECECEC;'>{rsi}</span>"
+
+def to_float(val):
+    try:
+        if isinstance(val, (pd.Series, np.ndarray)):
+            arr = np.asarray(val)
+            if arr.size == 1 and np.issubdtype(arr.dtype, np.number):
+                return float(arr.item())
+            return np.nan
+        else:
+            return float(val)
+    except:
+        return np.nan
+
+def get_first_two(text):
+    return " ".join(str(text).split()[:2]) if text else ""
 
 class suppress_stdout_stderr(object):
     def __enter__(self):
@@ -38,21 +83,22 @@ STRATEGIES = [
     {"label": "SS Strat", "id": "ssstrat"},
     {"label": "Daily > Weekly", "id": "dailyweekly"},
     {"label": "Just above/below", "id": "reversal"},
-    {"label": "Momentum", "id": "swing"},
+    {"label": "Ichi", "id": "ichi"},
     {"label": "Custom Watchlist", "id": "custom"},
 ]
 
 # ----------- OPTIMIZED RSI TAB: batch + cache ----------- #
-@st.cache_data(show_spinner="Batch downloading RSI data for all F&O stocks...")
+@st.cache_data(show_spinner="Fast RSI scan for all F&O stocks...")
 def get_rsi_strategy_data_optimized():
     fo_df = pd.read_csv("fo_stock_list.csv")
     tickers = fo_df["symbol"].str.strip().str.upper().tolist()
     ticker_name_map = dict(zip(fo_df["symbol"].str.strip().str.upper(), fo_df["name"]))
     lot_size_map = dict(zip(fo_df["symbol"].str.strip().str.upper(), fo_df["lot_size"]))
 
+    # Fastest: only last 20 days' Close prices
     df = yf.download(
         tickers=" ".join(tickers),
-        period="120d",
+        period="20d",
         interval="1d",
         group_by='ticker',
         progress=False,
@@ -67,7 +113,7 @@ def get_rsi_strategy_data_optimized():
             close = d["Close"].dropna() if "Close" in d else pd.Series([])
             price = close.iloc[-1] if len(close) > 0 else None
             prev_price = close.iloc[-2] if len(close) > 1 else price
-            rsi = ta.momentum.RSIIndicator(close, window=14).rsi().dropna().iloc[-1] if len(close) > 15 else None
+            rsi = ta.momentum.RSIIndicator(close, window=14).rsi().dropna().iloc[-1] if len(close) > 14 else None
         except Exception:
             price, prev_price, rsi = None, None, None
         results.append({
@@ -90,9 +136,13 @@ def clear_all_app_cache():
     get_ssstrat_stock_data_optimized.clear()
     fetch_all_ohlcv.clear()
     batch_analyze_all.clear()
-    # Add other .clear() for cached tab functions if needed
+    try:
+        from ichi import fetch_all_ohlcv as ichi_fetch_ohlcv, batch_analyze_ichi
+        ichi_fetch_ohlcv.clear()
+        batch_analyze_ichi.clear()
+    except Exception:
+        pass
 
-# ---- CLEAR ON FIRST LOAD ----
 if "cache_cleared_initial" not in st.session_state:
     clear_all_app_cache()
     st.session_state["cache_cleared_initial"] = True
@@ -133,78 +183,48 @@ for i, strat in enumerate(STRATEGIES):
 TRADINGVIEW_LINKS = {id: "https://www.tradingview.com/chart/HHuUSOTG/" for id in [s["id"] for s in STRATEGIES]}
 tv_chart_url = TRADINGVIEW_LINKS[selected]
 
-def get_first_two(text):
-    return " ".join(str(text).split()[:2])
-
-def price_arrow_and_change(price, prev_price):
-    try:
-        price = float(price)
-        prev_price = float(prev_price)
-        change = price - prev_price
-        pct = ((change) / prev_price) * 100 if prev_price else 0
-        if change > 0:
-            arrow, color = "↑", "#37F553"
-        elif change < 0:
-            arrow, color = "↓", "#FF3A3A"
-        else:
-            arrow, color = "", "#ECECEC"
-        return arrow, color, round(change,2), round(pct,2)
-    except:
-        return "", "#ECECEC", "NA", "NA"
-
-def rsi_color(val):
-    try:
-        v = float(val)
-        if v > 60: return "#37F553"
-        if v < 40: return "#FF3A3A"
-        return "#FFA500"
-    except: return "#ECECEC"
-
-def rsi_colored(rsi):
-    try:
-        val = float(rsi)
-        if val > 55:
-            color = "#37F553"
-        elif val < 50:
-            color = "#FF3A3A"
-        else:
-            color = "#FFD700"
-        return f"<span style='color:{color};font-weight:700;'>{val:.2f}</span>"
-    except:
-        return f"<span style='color:#ECECEC;'>{rsi}</span>"
-
-def to_float(val):
-    try:
-        if isinstance(val, (pd.Series, np.ndarray)):
-            arr = np.asarray(val)
-            if arr.size == 1 and np.issubdtype(arr.dtype, np.number):
-                return float(arr.item())
-            return np.nan
-        else:
-            return float(val)
-    except:
-        return np.nan
-
 # -------------- DASHBOARD TABS --------------
 if selected == "rsi":
     if st.button("🔄 Refresh RSI Data", key="refresh_rsi"):
         get_rsi_strategy_data_optimized.clear()
         st.rerun()
     df = get_rsi_strategy_data_optimized()
+
+    # --- Horizontal dynamic RSI filter toggles ---
+    filter_cols = st.columns(4)
+    require_rsi_above_55 = filter_cols[0].checkbox("RSI ≥ 55", value=True)
+    require_rsi_above_60 = filter_cols[1].checkbox("RSI ≥ 60", value=False)
+    require_rsi_below_45 = filter_cols[2].checkbox("RSI ≤ 45", value=False)
+    require_rsi_not_nan   = filter_cols[3].checkbox("Valid RSI Only", value=True)
+
     search_cols = st.columns([7, 1])
+    # --- Safe Reset: before text_input! ---
+    if search_cols[1].button("Reset", key="rsi_reset"):
+        st.session_state["rsi_search"] = ""
+        st.rerun()  # Ensures the field is cleared for the new run
+
     search_cols[0].markdown(
         "<div style='font-size:1.12em;font-weight: bold; color:#FFD700; padding-bottom:3px'>Search Stock Name</div>", unsafe_allow_html=True
     )
     search_cols[0].text_input(
-        "", 
-        value=st.session_state.get("rsi_search", ""), 
+        "",
+        value=st.session_state.get("rsi_search", ""),
         key="rsi_search",
         placeholder="Type stock name..."
     )
-    if search_cols[1].button("Reset", key="rsi_reset"):
-        st.session_state["rsi_search"] = ""
-    search_text = st.session_state.rsi_search.strip().lower()
-    filtered_df = df if not search_text else df[df["Stock Name"].str.lower().str.contains(search_text)]
+
+    search_text = st.session_state.get("rsi_search", "").strip().lower()
+    filtered_df = df.copy()
+    if require_rsi_not_nan:
+        filtered_df = filtered_df[filtered_df["Daily RSI"].notnull()]
+    if require_rsi_above_55:
+        filtered_df = filtered_df[filtered_df["Daily RSI"] >= 55]
+    if require_rsi_above_60:
+        filtered_df = filtered_df[filtered_df["Daily RSI"] >= 60]
+    if require_rsi_below_45:
+        filtered_df = filtered_df[filtered_df["Daily RSI"] <= 45]
+    if search_text:
+        filtered_df = filtered_df[filtered_df["Stock Name"].str.lower().str.contains(search_text)]
 
     def rsi_tile_color(val):
         try:
@@ -218,12 +238,7 @@ if selected == "rsi":
         except:
             return "#ECECEC"
 
-    left_group = filtered_df[filtered_df["Daily RSI"] >= 55].reset_index(drop=True)
-    right_group = filtered_df[filtered_df["Daily RSI"] < 55].reset_index(drop=True)
-    max_len = max(len(left_group), len(right_group))
-    rows_needed = (max_len + 3) // 4
-
-    def card(row, rsi_green=True):
+    def card(row):
         price = row['Latest Price']
         prev = row['Previous Price']
         arrow, pcolor, change, pct = price_arrow_and_change(price, prev)
@@ -233,10 +248,7 @@ if selected == "rsi":
         tv_url = f"{tv_chart_url}?symbol=NSE:{row['Symbol'].replace('.NS', '')}"
         name_html = f'<a href="{tv_url}" target="_blank" style="color:#fff;text-decoration:none;"><span style="font-size:1.13em;text-align:center;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{get_first_two(row["Stock Name"])}</span></a>'
         rsi = row["Daily RSI"]
-        if pd.isna(rsi):
-            rsi_txt = '<span style="font-weight:bold;color:#fff;">RSI: NA</span>'
-        else:
-            rsi_txt = f'<span style="color:{rsi_tile_color(rsi)};font-weight:bold;">RSI: {round(rsi,2)}</span>'
+        rsi_txt = f'<span style="color:{rsi_tile_color(rsi)};font-weight:bold;">RSI: {round(rsi,2) if pd.notnull(rsi) else "NA"}</span>'
         lot_line = f'{rsi_txt}&nbsp;&nbsp;<span style="font-size:0.94em;">Lot: <b>{row["Lot Size"]}</b></span>'
         return f"""
             <div style="
@@ -262,18 +274,16 @@ if selected == "rsi":
             </div>
         """
 
-    for row in range(rows_needed):
-        cols = st.columns(8)
-        for i in range(4):
-            idx = row * 4 + i
-            if idx < len(left_group):
-                with cols[i]:
-                    st.markdown(card(left_group.iloc[idx], rsi_green=True), unsafe_allow_html=True)
-        for i in range(4):
-            idx = row * 4 + i
-            if idx < len(right_group):
-                with cols[i+4]:
-                    st.markdown(card(right_group.iloc[idx], rsi_green=False), unsafe_allow_html=True)
+    num_cards = len(filtered_df)
+    cols_per_row = 8
+    rows_needed = (num_cards + cols_per_row - 1) // cols_per_row
+    for row_idx in range(rows_needed):
+        cols = st.columns(cols_per_row)
+        for col_idx in range(cols_per_row):
+            data_idx = row_idx * cols_per_row + col_idx
+            if data_idx < num_cards:
+                with cols[col_idx]:
+                    st.markdown(card(filtered_df.iloc[data_idx]), unsafe_allow_html=True)
 
 elif selected == "ssstrat":
     ss_strat_dashboard(tv_chart_url)
@@ -281,7 +291,9 @@ elif selected == "dailyweekly":
     daily_weekly_dashboard()
 elif selected == "reversal":
     just_above_below_dashboard()
-elif selected not in ["rsi", "ssstrat", "dailyweekly", "reversal"]:
+elif selected == "ichi":
+    ichi_dashboard()
+elif selected not in ["rsi", "ssstrat", "dailyweekly", "reversal", "ichi"]:
     st.info("This strategy dashboard is coming soon!")
 else:
     st.markdown("> **Select a strategy tile above to view its details.**")
