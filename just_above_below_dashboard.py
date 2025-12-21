@@ -5,13 +5,13 @@ import yfinance as yf
 import streamlit as st
 import datetime
 import warnings
-import sys
-import os
 from ta.trend import ADXIndicator
 from ta.volatility import AverageTrueRange
 import scipy.signal
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 warnings.filterwarnings("ignore")
+
 
 # ========== Helper Functions ==========
 def detect_rsi_divergence(df, rsi_col='RSI', lookback=14):
@@ -36,6 +36,7 @@ def detect_rsi_divergence(df, rsi_col='RSI', lookback=14):
     else:
         return None
 
+
 def format_rdiv(dval, wval):
     def _build(val):
         if val == "Bull":
@@ -46,8 +47,10 @@ def format_rdiv(dval, wval):
             return '<span style="color:#fff;">N</span>'
     return f'<span style="color:#fff; font-weight:700;">RDiv:</span> D - {_build(dval)} | W {_build(wval)}'
 
+
 def get_first_two(text):
     return " ".join(str(text).split()[:2])
+
 
 def price_arrow_and_change(price, prev_price):
     try:
@@ -65,6 +68,7 @@ def price_arrow_and_change(price, prev_price):
     except:
         return "", "#ECECEC", "NA", "NA"
 
+
 def rsi_colored_custom(rsi):
     try:
         val = float(rsi)
@@ -78,12 +82,14 @@ def rsi_colored_custom(rsi):
     except:
         return f"<span style='color:#ECECEC;font-weight:700;'>{rsi}</span>"
 
+
 def macd_tradingview(close, fast=12, slow=26, signal=9):
     ema_fast = close.ewm(span=fast, adjust=False).mean()
     ema_slow = close.ewm(span=slow, adjust=False).mean()
     macd_line = ema_fast - ema_slow
     signal_line = macd_line.ewm(span=signal, adjust=False).mean()
     return macd_line, signal_line
+
 
 def obv_calc(df):
     obv = [0]
@@ -95,6 +101,7 @@ def obv_calc(df):
         else:
             obv.append(obv[-1])
     return pd.Series(obv, index=df.index)
+
 
 def obv_trend_arrow(df, period):
     obv = obv_calc(df)
@@ -110,6 +117,7 @@ def obv_trend_arrow(df, period):
         return "<span style='font-size:1.15em;color:#FF3A3A;'>↓</span>"
     else:
         return "<span style='font-size:1.15em;color:#FF69B4;'>–</span>"
+
 
 def supertrend_tradingview_wilder(df, period=10, multiplier=3.0):
     if len(df) < period:
@@ -150,6 +158,7 @@ def supertrend_tradingview_wilder(df, period=10, multiplier=3.0):
         st_val.iloc[i] = final_up.iloc[i] if trend.iloc[i] == 1 else final_dn.iloc[i]
     return st_val.round(2), trend.map({1: 'UP', -1: 'DOWN'})
 
+
 def to_float(val):
     try:
         if isinstance(val, (pd.Series, np.ndarray)):
@@ -162,6 +171,7 @@ def to_float(val):
     except:
         return np.nan
 
+
 def compute_stochastic(df, k_period=5, d_period=3, smooth_k=3):
     low_min = df['Low'].rolling(window=k_period, min_periods=k_period).min()
     high_max = df['High'].rolling(window=k_period, min_periods=k_period).max()
@@ -169,6 +179,7 @@ def compute_stochastic(df, k_period=5, d_period=3, smooth_k=3):
     k = raw_k.rolling(window=smooth_k, min_periods=smooth_k).mean()
     d = k.rolling(window=d_period, min_periods=d_period).mean()
     return k, d
+
 
 def ema50_comparison_row(ema50, sma20, section_type):
     if section_type == 'long':
@@ -186,6 +197,7 @@ def ema50_comparison_row(ema50, sma20, section_type):
             yn = "Y"
             color = "#37F553"
     return f"<span style='font-weight:700;'>50: <b>{ema50:.2f}</b> <span style='color:{color};font-size:1.19em;'>{yn}</span></span>"
+
 
 def two_percent_label(ema50, sma20, section_type):
     try:
@@ -205,6 +217,7 @@ def two_percent_label(ema50, sma20, section_type):
                 f"<span style='color:#FFD700'>({pct_label})</span></span>")
     except:
         return "<span style='font-weight:700;'>2%: <span style='color:#FF3A3A;'>N</span> <span style='color:#FFD700;'>(NA)</span></span>"
+
 
 def gap_ema50_label(price_now, ema50, sma20, section_type):
     try:
@@ -226,7 +239,9 @@ def gap_ema50_label(price_now, ema50, sma20, section_type):
     except:
         return ""
 
+
 def calc_indicators(df_d):
+    """Vectorized indicator calculation"""
     adx = ADXIndicator(df_d['High'], df_d['Low'], df_d['Close'], 14)
     df_d['ADX14'] = adx.adx()
     df_d['DI+'] = adx.adx_pos()
@@ -239,6 +254,7 @@ def calc_indicators(df_d):
     atr = AverageTrueRange(df_d['High'], df_d['Low'], df_d['Close'], 14)
     df_d['ATR14'] = atr.average_true_range()
     return df_d
+
 
 @st.cache_data(show_spinner="Downloading all symbol data (batched)...")
 def fetch_all_ohlcv(ticker_list):
@@ -260,6 +276,7 @@ def fetch_all_ohlcv(ticker_list):
         data_dict[ticker_list[0]] = sdf
     return data_dict
 
+
 def process_fo_stock_list():
     try:
         fo_df = pd.read_csv('fo_stock_list.csv')
@@ -268,63 +285,102 @@ def process_fo_stock_list():
         return pd.DataFrame()
     return fo_df
 
-# ========== Optimized Batch Analyzer ==========
-@st.cache_data(show_spinner="Calculating indicator tiles...")
+
+def process_single_stock(args):
+    """Process a single stock - for parallel execution"""
+    symbol, lot, name, data_dict = args
+    
+    df_d = data_dict.get(symbol)
+    if df_d is None or df_d.shape[0] < 60:
+        return None
+    
+    sma_now = df_d['Close'].rolling(20).mean().iloc[-1]
+    sma_prev = df_d['Close'].rolling(20).mean().iloc[-2]
+    close_now = to_float(df_d['Close'].iloc[-1])
+    close_prev = to_float(df_d['Close'].iloc[-2])
+    ema_now = df_d['Close'].ewm(span=50).mean().iloc[-1]
+    
+    cond_cross_above = (close_now > sma_now) and (close_prev <= sma_prev)
+    cond_cross_below = (close_now < sma_now) and (close_prev >= sma_prev)
+    
+    if not (cond_cross_above or cond_cross_below):
+        return None
+    
+    df_d = calc_indicators(df_d)
+    st_series, st_dir = supertrend_tradingview_wilder(df_d, period=10, multiplier=3.0)
+    stoch_k, stoch_d = compute_stochastic(df_d, k_period=5, d_period=3, smooth_k=3)
+    
+    shr_k_val = round(stoch_k.iloc[-1], 2) if stoch_k is not None else "NA"
+    shr_d_val = round(stoch_d.iloc[-1], 2) if stoch_d is not None else "NA"
+    shr_dot = '<span style="color:#37F553;font-size:1.23em">&#x25CF;</span>' if (shr_k_val != "NA" and shr_k_val >= shr_d_val) else '<span style="color:#FF3A3A;font-size:1.23em">&#x25CF;</span>'
+    
+    if st_series is not None:
+        supertrend_val = st_series.iloc[-1]
+        supertrend_dir = st_dir[-1]
+    else:
+        supertrend_val, supertrend_dir = "NA", "NA"
+    
+    result_data = {
+        'Name': name,
+        'Symbol': symbol,
+        'Lot': lot,
+        'D': round(sma_now, 2),
+        'EMA50': round(ema_now, 2),
+        'SuperTrend': round(supertrend_val, 2) if pd.notna(supertrend_val) else "NA",
+        'SuperTrendDir': supertrend_dir,
+        'Close': round(close_now,2),
+        'PrevClose': round(close_prev,2),
+        'ADX14': round(to_float(df_d['ADX14'].iloc[-1]), 2),
+        'DI+': round(to_float(df_d['DI+'].iloc[-1]), 2),
+        'DI-': round(to_float(df_d['DI-'].iloc[-1]), 2),
+        'MACD': round(to_float(df_d['MACD'].iloc[-1]), 2),
+        'MACD_signal': round(to_float(df_d['MACD_signal'].iloc[-1]), 2),
+        'ATR14': round(to_float(df_d['ATR14'].iloc[-1]), 2),
+        'Daily_RSI': round(to_float(ta.momentum.RSIIndicator(df_d['Close'], window=14).rsi().iloc[-1]),2),
+        'OBV_ARROW': obv_trend_arrow(df_d, 10),
+        'SHR_DOT': shr_dot,
+        'SHR_K': shr_k_val,
+        'SHR_D': shr_d_val,
+        'cross_type': 'above' if cond_cross_above else 'below'
+    }
+    
+    return result_data
+
+
+# ========== Optimized Batch Analyzer with Parallel Processing ==========
+@st.cache_data(show_spinner="Calculating indicator tiles in parallel...")
 def batch_analyze_all(data_dict, fo_df):
-    long_results, short_results = [], []
+    """Parallel processing version"""
+    
+    # Prepare arguments for parallel processing
+    args_list = []
     for idx, row in fo_df.iterrows():
         symbol = row['symbol']
         lot = row['lot_size'] if 'lot_size' in row else ''
         name = get_first_two(row['name']) if 'name' in row else symbol
-        df_d = data_dict.get(symbol)
-        if df_d is None or df_d.shape[0] < 60:
-            continue
-        sma_now = df_d['Close'].rolling(20).mean().iloc[-1]
-        sma_prev = df_d['Close'].rolling(20).mean().iloc[-2]
-        close_now = to_float(df_d['Close'].iloc[-1])
-        close_prev = to_float(df_d['Close'].iloc[-2])
-        ema_now = df_d['Close'].ewm(span=50).mean().iloc[-1]
-        cond_cross_above = (close_now > sma_now) and (close_prev <= sma_prev)
-        cond_cross_below = (close_now < sma_now) and (close_prev >= sma_prev)
-        if cond_cross_above or cond_cross_below:
-            df_d = calc_indicators(df_d)
-            st_series, st_dir = supertrend_tradingview_wilder(df_d, period=10, multiplier=3.0)
-            stoch_k, stoch_d = compute_stochastic(df_d, k_period=5, d_period=3, smooth_k=3)
-            shr_k_val = round(stoch_k.iloc[-1], 2) if stoch_k is not None else "NA"
-            shr_d_val = round(stoch_d.iloc[-1], 2) if stoch_d is not None else "NA"
-            shr_dot = '<span style="color:#37F553;font-size:1.23em">&#x25CF;</span>' if (shr_k_val != "NA" and shr_k_val >= shr_d_val) else '<span style="color:#FF3A3A;font-size:1.23em">&#x25CF;</span>'
-            if st_series is not None:
-                supertrend_val = st_series.iloc[-1]
-                supertrend_dir = st_dir[-1]
-            else:
-                supertrend_val, supertrend_dir = "NA", "NA"
-            result_data = {
-                'Name': name,
-                'Symbol': symbol,
-                'Lot': lot,
-                'D': round(sma_now, 2),
-                'EMA50': round(ema_now, 2),
-                'SuperTrend': round(supertrend_val, 2) if pd.notna(supertrend_val) else "NA",
-                'SuperTrendDir': supertrend_dir,
-                'Close': round(close_now,2),
-                'PrevClose': round(close_prev,2),
-                'ADX14': round(to_float(df_d['ADX14'].iloc[-1]), 2),
-                'DI+': round(to_float(df_d['DI+'].iloc[-1]), 2),
-                'DI-': round(to_float(df_d['DI-'].iloc[-1]), 2),
-                'MACD': round(to_float(df_d['MACD'].iloc[-1]), 2),
-                'MACD_signal': round(to_float(df_d['MACD_signal'].iloc[-1]), 2),
-                'ATR14': round(to_float(df_d['ATR14'].iloc[-1]), 2),
-                'Daily_RSI': round(to_float(ta.momentum.RSIIndicator(df_d['Close'], window=14).rsi().iloc[-1]),2),
-                'OBV_ARROW': obv_trend_arrow(df_d, 10),
-                'SHR_DOT': shr_dot,
-                'SHR_K': shr_k_val,
-                'SHR_D': shr_d_val
-            }
-            if cond_cross_above:
-                long_results.append(result_data)
-            if cond_cross_below:
-                short_results.append(result_data)
+        args_list.append((symbol, lot, name, data_dict))
+    
+    # Process in parallel
+    results = []
+    max_workers = min(10, len(args_list))
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_args = {executor.submit(process_single_stock, args): args for args in args_list}
+        
+        for future in as_completed(future_to_args):
+            try:
+                result = future.result()
+                if result is not None:
+                    results.append(result)
+            except:
+                pass
+    
+    # Separate long and short
+    long_results = [r for r in results if r['cross_type'] == 'above']
+    short_results = [r for r in results if r['cross_type'] == 'below']
+    
     return long_results, short_results
+
 
 def get_above_sma_labels(symbol, data_dict):
     try:
@@ -352,6 +408,7 @@ def get_above_sma_labels(symbol, data_dict):
     except:
         return "<span style='color:#FFD700;'>M: - | W: -</span>"
 
+
 def just_above_below_dashboard():
     today_str = datetime.datetime.now().strftime("%d-%b-%Y")
     st.markdown(
@@ -376,6 +433,7 @@ def just_above_below_dashboard():
     section_colors = ["#18AA47", "#E53935"]
     section_dots = ["#80D8FF", "#FFA500"]
     section_tiles = [long_results, short_results]
+
 
     for idx, col in enumerate(cols):
         col.markdown(f'''
@@ -500,6 +558,7 @@ def just_above_below_dashboard():
                 """, unsafe_allow_html=True)
         if not tiles:
             col.write("No stocks matched.")
+
 
 if __name__ == "__main__":
     just_above_below_dashboard()
