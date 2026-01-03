@@ -11,7 +11,121 @@ import scipy.signal
 
 warnings.filterwarnings("ignore")
 
-# ========== Helper Functions ==========
+
+# ========== NEW: Enhancement Functions ==========
+
+def calculate_support_resistance_fib(df, window=20):
+    try:
+        highs = df['High'].tail(window)
+        lows = df['Low'].tail(window)
+        swing_high = highs.max()
+        swing_low = lows.min()
+        week_52_high = df['High'].tail(252).max()
+        week_52_low = df['Low'].tail(252).min()
+        fib_range = week_52_high - week_52_low
+        fib_levels = {
+            'fib_0': week_52_low,
+            'fib_236': week_52_low + (fib_range * 0.236),
+            'fib_382': week_52_low + (fib_range * 0.382),
+            'fib_500': week_52_low + (fib_range * 0.500),
+            'fib_618': week_52_low + (fib_range * 0.618),
+            'fib_786': week_52_low + (fib_range * 0.786),
+            'fib_100': week_52_high
+        }
+        all_support_levels = [swing_low, week_52_low] + [fib_levels[k] for k in ['fib_236', 'fib_382', 'fib_500']]
+        all_resistance_levels = [swing_high, week_52_high] + [fib_levels[k] for k in ['fib_618', 'fib_786']]
+        return {
+            'support_levels': sorted(all_support_levels),
+            'resistance_levels': sorted(all_resistance_levels, reverse=True),
+            'swing_high': swing_high,
+            'swing_low': swing_low,
+            'week_52_high': week_52_high,
+            'week_52_low': week_52_low,
+            'fib_levels': fib_levels
+        }
+    except:
+        return None
+
+
+def get_sr_status(price, sr_data, threshold=0.02):
+    if sr_data is None:
+        return "⚪ Unknown", None, None
+    try:
+        price = float(price)
+        dist_to_52w_high = ((sr_data['week_52_high'] - price) / price) * 100
+        dist_to_52w_low = ((price - sr_data['week_52_low']) / price) * 100
+        if abs(dist_to_52w_high) < 2:
+            return "⚠️ 52W High", sr_data['week_52_high'], dist_to_52w_high
+        if abs(dist_to_52w_low) < 2:
+            return "⚠️ 52W Low", sr_data['week_52_low'], -dist_to_52w_low
+        for support in sr_data['support_levels']:
+            dist = ((price - support) / support) * 100
+            if abs(dist) < threshold * 100:
+                return f"🟢 Support", support, dist
+        for resistance in sr_data['resistance_levels']:
+            dist = ((resistance - price) / price) * 100
+            if abs(dist) < threshold * 100:
+                return f"🔴 Resistance", resistance, dist
+        return "🟡 Mid", None, None
+    except:
+        return "⚪ Unknown", None, None
+
+
+def check_volume_status(df, lookback=20):
+    try:
+        current_vol = df['Volume'].iloc[-1]
+        avg_vol = df['Volume'].tail(lookback).mean()
+        ratio = current_vol / avg_vol if avg_vol > 0 else 1
+        if ratio > 1.5:
+            return "✓ High", ratio, "#37F553"
+        elif ratio < 0.8:
+            return "✗ Low", ratio, "#FF3A3A"
+        else:
+            return "→ Avg", ratio, "#FFD700"
+    except:
+        return "⚪ Unk", 1.0, "#ECECEC"
+
+
+def detect_obv_divergence_enhanced(df, lookback=14):
+    try:
+        obv = [0]
+        for i in range(1, len(df)):
+            if df['Close'].iloc[i] > df['Close'].iloc[i-1]:
+                obv.append(obv[-1] + df['Volume'].iloc[i])
+            elif df['Close'].iloc[i] < df['Close'].iloc[i-1]:
+                obv.append(obv[-1] - df['Volume'].iloc[i])
+            else:
+                obv.append(obv[-1])
+        df_temp = df.copy()
+        df_temp['OBV'] = obv
+        price = df_temp['Close'].values
+        obv_vals = df_temp['OBV'].values
+        price_lows = scipy.signal.argrelextrema(price, np.less, order=lookback)[0]
+        price_highs = scipy.signal.argrelextrema(price, np.greater, order=lookback)[0]
+        obv_lows = scipy.signal.argrelextrema(obv_vals, np.less, order=lookback)[0]
+        obv_highs = scipy.signal.argrelextrema(obv_vals, np.greater, order=lookback)[0]
+        bull_div = False
+        if len(price_lows) >= 2 and len(obv_lows) >= 2:
+            if (price[price_lows[-1]] < price[price_lows[-2]] and obv_vals[obv_lows[-1]] > obv_vals[obv_lows[-2]]):
+                bull_div = True
+        bear_div = False
+        if len(price_highs) >= 2 and len(obv_highs) >= 2:
+            if (price[price_highs[-1]] > price[price_highs[-2]] and obv_vals[obv_highs[-1]] < obv_vals[obv_highs[-2]]):
+                bear_div = True
+        obv_now = obv[-1]
+        obv_prev = obv[-lookback-1] if len(obv) > lookback else obv[0]
+        obv_trend = "↑" if obv_now > obv_prev else "↓" if obv_now < obv_prev else "→"
+        if bull_div:
+            return f"🟢 Bull Div", "bull_div"
+        elif bear_div:
+            return f"🔴 Bear Div", "bear_div"
+        else:
+            return f"{obv_trend} No Div", "no_div"
+    except:
+        return "⚪ Unknown", "unknown"
+
+
+# ========== Original Helper Functions ==========
 
 def detect_rsi_divergence(df, rsi_col='RSI', lookback=14):
     price = df['Close']
@@ -35,8 +149,10 @@ def detect_rsi_divergence(df, rsi_col='RSI', lookback=14):
     else:
         return None
 
+
 def get_first_two(text):
     return " ".join(str(text).split()[:2]) if text else ""
+
 
 def price_arrow_and_change(price, prev_price):
     try:
@@ -54,6 +170,7 @@ def price_arrow_and_change(price, prev_price):
     except:
         return "", "#ECECEC", "NA", "NA"
 
+
 def rsi_colored_custom(rsi):
     try:
         val = float(rsi)
@@ -67,6 +184,7 @@ def rsi_colored_custom(rsi):
     except:
         return f"<span style='color:#ECECEC;font-weight:700;'>{rsi}</span>"
 
+
 def obv_calc(df):
     obv = [0]
     for i in range(1, len(df)):
@@ -78,20 +196,22 @@ def obv_calc(df):
             obv.append(obv[-1])
     return pd.Series(obv, index=df.index)
 
+
 def obv_trend_arrow(df, period):
     obv = obv_calc(df)
     if len(obv) < period + 1:
-        return "<span style='font-size:1.15em;color:#FF69B4;'>–</span>"
+        return "<span style='font-size:1.35em;color:#FF69B4;'>–</span>"
     obv_now = obv.iloc[-1]
     obv_prev = obv.iloc[-period-1]
     flat_threshold = 0.005 * abs(obv_now)
     diff = obv_now - obv_prev
     if diff > flat_threshold:
-        return "<span style='font-size:1.15em;color:#37F553;'>↑</span>"
+        return "<span style='font-size:1.35em;color:#37F553;'>↑</span>"
     elif diff < -flat_threshold:
-        return "<span style='font-size:1.15em;color:#FF3A3A;'>↓</span>"
+        return "<span style='font-size:1.35em;color:#FF3A3A;'>↓</span>"
     else:
-        return "<span style='font-size:1.15em;color:#FF69B4;'>–</span>"
+        return "<span style='font-size:1.35em;color:#FF69B4;'>–</span>"
+
 
 def supertrend_tradingview_wilder(df, period=10, multiplier=3.0):
     if len(df) < period:
@@ -132,6 +252,7 @@ def supertrend_tradingview_wilder(df, period=10, multiplier=3.0):
         st_val.iloc[i] = final_up.iloc[i] if trend.iloc[i] == 1 else final_dn.iloc[i]
     return st_val.round(2), trend.map({1: 'UP', -1: 'DOWN'})
 
+
 def to_float(val):
     try:
         if isinstance(val, (pd.Series, np.ndarray)):
@@ -144,6 +265,7 @@ def to_float(val):
     except:
         return np.nan
 
+
 def compute_stochastic(df, k_period=5, d_period=3, smooth_k=3):
     low_min = df['Low'].rolling(window=k_period, min_periods=k_period).min()
     high_max = df['High'].rolling(window=k_period, min_periods=k_period).max()
@@ -151,6 +273,7 @@ def compute_stochastic(df, k_period=5, d_period=3, smooth_k=3):
     k = raw_k.rolling(window=smooth_k, min_periods=smooth_k).mean()
     d = k.rolling(window=d_period, min_periods=d_period).mean()
     return k, d
+
 
 def ema50_comparison_row(ema50, sma20, section_type):
     if section_type == 'long':
@@ -160,6 +283,7 @@ def ema50_comparison_row(ema50, sma20, section_type):
         yn = "N" if sma20 > ema50 else "Y"
         color = "#FF3A3A" if yn == "N" else "#37F553"
     return f"<span style='font-weight:700;'>50: <b>{ema50:.2f}</b> <span style='color:{color};font-size:1.19em;'>{yn}</span></span>"
+
 
 def calc_indicators(df_d):
     adx = ADXIndicator(df_d['High'], df_d['Low'], df_d['Close'], 14)
@@ -175,6 +299,7 @@ def calc_indicators(df_d):
     atr = AverageTrueRange(df_d['High'], df_d['Low'], df_d['Close'], 14)
     df_d['ATR14'] = atr.average_true_range()
     return df_d
+
 
 def get_above_sma_labels(symbol, data_dict):
     try:
@@ -204,6 +329,7 @@ def get_above_sma_labels(symbol, data_dict):
     except:
         return "<span style='color:#FFD700;'>M: - | W: -</span>"
 
+
 def calc_ichimoku(df, tenkan=9, kijun=26, senkou=52):
     high_9 = df['High'].rolling(window=tenkan).max()
     low_9 = df['Low'].rolling(window=tenkan).min()
@@ -215,7 +341,7 @@ def calc_ichimoku(df, tenkan=9, kijun=26, senkou=52):
     high_52 = df['High'].rolling(window=senkou).max()
     low_52 = df['Low'].rolling(window=senkou).min()
     senkou_span_b = ((high_52 + low_52) / 2).shift(kijun)
-    chikou_span = df['Close'].shift(-kijun)  # Lagging Span
+    chikou_span = df['Close'].shift(-kijun)
     return pd.DataFrame({
         'Tenkan': tenkan_sen,
         'Kijun': kijun_sen,
@@ -227,6 +353,7 @@ def calc_ichimoku(df, tenkan=9, kijun=26, senkou=52):
         'Low': df['Low'],
     }, index=df.index)
 
+
 @st.cache_data(show_spinner="Batch loading Ichimoku F&O data...")
 def fetch_all_ohlcv(ticker_list):
     tickers_str = " ".join(ticker_list)
@@ -237,15 +364,13 @@ def fetch_all_ohlcv(ticker_list):
             if symbol in df:
                 sdf = df[symbol].dropna()
                 sdf = sdf[~sdf.index.duplicated(keep='first')]
-                if 'Volume' in sdf.columns:
-                    sdf = sdf[sdf['Volume'] > 0]
-                sdf = sdf[~((sdf['Open'] == sdf['High']) & (sdf['High'] == sdf['Low']) & (sdf['Low'] == sdf['Close']))]
                 data_dict[symbol] = sdf
     else:
         sdf = df.dropna()
         sdf = sdf[~sdf.index.duplicated(keep='first')]
         data_dict[ticker_list[0]] = sdf
     return data_dict
+
 
 def process_fo_stock_list():
     try:
@@ -255,12 +380,9 @@ def process_fo_stock_list():
         return pd.DataFrame()
     return fo_df
 
+
 @st.cache_data(show_spinner="Triple Alignment signals...")
-def batch_analyze_ichi(data_dict, fo_df,
-                       require_cloud_color,
-                       require_tenkan_kijun,
-                       require_chikou_cloud,
-                       require_chikou_price):
+def batch_analyze_ichi(data_dict, fo_df, require_cloud_color, require_tenkan_kijun, require_chikou_cloud, require_chikou_price):
     long_results, short_results = [], []
     for idx, row in fo_df.iterrows():
         symbol = row['symbol']
@@ -269,7 +391,6 @@ def batch_analyze_ichi(data_dict, fo_df,
         df_d = data_dict.get(symbol)
         if df_d is None or df_d.shape[0] < 80:
             continue
-
         ichi = calc_ichimoku(df_d)
         close_now = to_float(ichi['Close'].iloc[-1])
         tenkan_now = to_float(ichi['Tenkan'].iloc[-1])
@@ -278,8 +399,7 @@ def batch_analyze_ichi(data_dict, fo_df,
         span_b_now = to_float(ichi['SpanB'].iloc[-1])
         cloud_now_top = max(span_a_now, span_b_now)
         cloud_now_bot = min(span_a_now, span_b_now)
-        cloud_now_dir = span_a_now > span_b_now  # green
-
+        cloud_now_dir = span_a_now > span_b_now
         try:
             chikou_26 = to_float(ichi['Chikou'].iloc[-26])
             span_a_26ago = to_float(ichi['SpanA'].iloc[-26])
@@ -289,38 +409,18 @@ def batch_analyze_ichi(data_dict, fo_df,
             continue
         cloud_26up = max(span_a_26ago, span_b_26ago)
         cloud_26down = min(span_a_26ago, span_b_26ago)
-
-        # Build conditionals from toggles
         long_cloud_ok = cloud_now_dir if require_cloud_color else True
         short_cloud_ok = (not cloud_now_dir) if require_cloud_color else True
-
         long_tk_ok = (tenkan_now > kijun_now) if require_tenkan_kijun else True
         short_tk_ok = (tenkan_now < kijun_now) if require_tenkan_kijun else True
-
         long_chikou_cloud_ok = (chikou_26 > cloud_26up) if require_chikou_cloud else True
         short_chikou_cloud_ok = (chikou_26 < cloud_26down) if require_chikou_cloud else True
-
         long_chikou_price_ok = (chikou_26 > close_26) if require_chikou_price else True
         short_chikou_price_ok = (chikou_26 < close_26) if require_chikou_price else True
-
-        long_filter = (
-            (close_now > cloud_now_top)
-            and long_cloud_ok
-            and long_tk_ok
-            and long_chikou_cloud_ok
-            and long_chikou_price_ok
-        )
-        short_filter = (
-            (close_now < cloud_now_bot)
-            and short_cloud_ok
-            and short_tk_ok
-            and short_chikou_cloud_ok
-            and short_chikou_price_ok
-        )
-
+        long_filter = ((close_now > cloud_now_top) and long_cloud_ok and long_tk_ok and long_chikou_cloud_ok and long_chikou_price_ok)
+        short_filter = ((close_now < cloud_now_bot) and short_cloud_ok and short_tk_ok and short_chikou_cloud_ok and short_chikou_price_ok)
         if not (long_filter or short_filter):
             continue
-
         close_prev = to_float(ichi['Close'].iloc[-2])
         df_d = calc_indicators(df_d)
         st_series, st_dir = supertrend_tradingview_wilder(df_d, period=10, multiplier=3.0)
@@ -336,6 +436,13 @@ def batch_analyze_ichi(data_dict, fo_df,
         d_sma = round(to_float(df_d['SMA20'].iloc[-1]),2)
         ema50 = round(to_float(df_d['EMA50'].iloc[-1]),2)
         section_type = "long" if long_filter else "short"
+        
+        # NEW: Enhanced metrics
+        sr_data = calculate_support_resistance_fib(df_d, window=20)
+        sr_status, sr_level, sr_dist = get_sr_status(close_now, sr_data)
+        vol_status, vol_ratio, vol_color = check_volume_status(df_d, lookback=20)
+        obv_div_text, obv_div_type = detect_obv_divergence_enhanced(df_d, lookback=14)
+        
         result_data = {
             'Name': name,
             'Symbol': symbol,
@@ -354,51 +461,94 @@ def batch_analyze_ichi(data_dict, fo_df,
             'SHR_DOT': shr_dot,
             'SHR_K': shr_k_val,
             'SHR_D': shr_d_val,
-            'SectionType': section_type
+            'SectionType': section_type,
+            # NEW FIELDS
+            'SR_Status': sr_status,
+            'SR_Level': round(sr_level, 2) if sr_level else "NA",
+            'SR_Dist': round(sr_dist, 2) if sr_dist else "NA",
+            'Vol_Status': vol_status,
+            'Vol_Ratio': round(vol_ratio, 2),
+            'Vol_Color': vol_color,
+            'OBV_Div': obv_div_text,
+            'OBV_Div_Type': obv_div_type,
         }
         if long_filter:
             long_results.append(result_data)
         if short_filter:
             short_results.append(result_data)
+    
+    # NOW calculate MTF for ALL results
+    for result in (long_results + short_results):
+        symbol = result['Symbol']
+        try:
+            df_d = data_dict.get(symbol)
+            if df_d is not None and len(df_d) >= 60:
+                price = float(df_d['Close'].iloc[-1])
+                sma20_d = float(df_d['Close'].rolling(20).mean().iloc[-1])
+                daily_ok = price > sma20_d
+                weekly_ok = None
+                try:
+                    df_w_close = df_d['Close'].resample('W-FRI').last().dropna()
+                    if len(df_w_close) >= 20:
+                        sma20_w = float(df_w_close.rolling(20).mean().iloc[-1])
+                        weekly_ok = price > sma20_w
+                except:
+                    weekly_ok = None
+                monthly_ok = None
+                try:
+                    df_m_close = df_d['Close'].resample('M').last().dropna()
+                    if len(df_m_close) >= 20:
+                        sma20_m = float(df_m_close.rolling(20).mean().iloc[-1])
+                        monthly_ok = price > sma20_m
+                except:
+                    monthly_ok = None
+                result['MTF_Daily'] = "✓" if daily_ok else "✗"
+                result['MTF_Weekly'] = "✓" if weekly_ok is True else ("⚪" if weekly_ok is None else "✗")
+                result['MTF_Monthly'] = "✓" if monthly_ok is True else ("⚪" if monthly_ok is None else "✗")
+                result['MTF_Score'] = sum([1 for x in [daily_ok, weekly_ok, monthly_ok] if x is True])
+            else:
+                result['MTF_Daily'] = "⚪"
+                result['MTF_Weekly'] = "⚪"
+                result['MTF_Monthly'] = "⚪"
+                result['MTF_Score'] = 0
+        except:
+            result['MTF_Daily'] = "⚪"
+            result['MTF_Weekly'] = "⚪"
+            result['MTF_Monthly'] = "⚪"
+            result['MTF_Score'] = 0
+    
     return long_results, short_results
+
 
 def ichi_dashboard():
     today_str = datetime.datetime.now().strftime("%d-%b-%Y")
-    st.markdown("<div style='font-size:2em;font-weight:800;color:#FFD700;padding-bottom:2px;'>Ichi: Triple Alignment (Toggleable)</div>",unsafe_allow_html=True)
+    st.markdown("<div style='font-size:2em;font-weight:800;color:#FFD700;padding-bottom:2px;'>Ichi: Triple Alignment (Enhanced)</div>",unsafe_allow_html=True)
     st.markdown(f"<div style='text-align:right;font-size:1.2em;color:#FFD700;font-weight:700;padding-top:4px;'>{today_str}</div>", unsafe_allow_html=True)
     st.markdown("<h2 style='font-size:1.30em; text-align:center; margin-bottom:10px;color:#FFD700;'>Ichimoku: Triple Alignment with Live Toggles</h2>", unsafe_allow_html=True)
-
-    # --- Alignment Toggles ---
-    # Place all toggles in a single row
+    
     cb_cols = st.columns(4)
-    require_cloud_color   = cb_cols[0].checkbox("Cloud Color", value=True, help="Require green (bull) or red (bear) Kumo for signal")
-    require_tenkan_kijun  = cb_cols[1].checkbox("Tenkan/Kijun", value=True, help="Require Tenkan > Kijun (bull) or < (bear)")
-    require_chikou_cloud  = cb_cols[2].checkbox("Chikou vs Cloud", value=True, help="Require Chikou Span above/below cloud 26 bars back")
-    require_chikou_price  = cb_cols[3].checkbox("Chikou vs Price", value=True, help="Require Chikou Span above/below price 26 bars back")
-
-
+    require_cloud_color = cb_cols[0].checkbox("Cloud Color", value=True, help="Require green (bull) or red (bear) Kumo for signal")
+    require_tenkan_kijun = cb_cols[1].checkbox("Tenkan/Kijun", value=True, help="Require Tenkan > Kijun (bull) or < (bear)")
+    require_chikou_cloud = cb_cols[2].checkbox("Chikou vs Cloud", value=True, help="Require Chikou Span above/below cloud 26 bars back")
+    require_chikou_price = cb_cols[3].checkbox("Chikou vs Price", value=True, help="Require Chikou Span above/below price 26 bars back")
+    
     if st.button("🔄 Refresh Data", key="refresh_ichi"):
         fetch_all_ohlcv.clear()
         batch_analyze_ichi.clear()
-
+    
     fo_df = process_fo_stock_list()
     if fo_df.empty:
         return
     ticker_list = list(fo_df['symbol'])
     data_dict = fetch_all_ohlcv(ticker_list)
-    long_results, short_results = batch_analyze_ichi(data_dict, fo_df,
-        require_cloud_color=require_cloud_color,
-        require_tenkan_kijun=require_tenkan_kijun,
-        require_chikou_cloud=require_chikou_cloud,
-        require_chikou_price=require_chikou_price,
-    )
-
+    long_results, short_results = batch_analyze_ichi(data_dict, fo_df, require_cloud_color, require_tenkan_kijun, require_chikou_cloud, require_chikou_price)
+    
     cols = st.columns(2)
     section_titles = ["Long", "Short"]
     section_colors = ["#18AA47", "#E53935"]
     section_dots = ["#80D8FF", "#FFA500"]
     section_tiles = [long_results, short_results]
-
+    
     for idx, col in enumerate(cols):
         col.markdown(f'''
             <div style="background:{section_colors[idx]};padding:13px 0 13px 0;border-radius:13px;margin-bottom:12px;text-align:center;width:99%;">
@@ -436,7 +586,6 @@ def ichi_dashboard():
                 supertrend_html = f"ST: <b>{supertrend_val}</b> <span style='color:{st_dir_col};font-weight:900;font-size:1.12em'>{supertrend_dir}</span>"
                 daily_rsi_val = s.get('Daily_RSI', 'NA')
                 daily_rsi_html = rsi_colored_custom(daily_rsi_val)
-
                 adx_val = s.get('ADX14', 'NA')
                 di_plus = s.get('DI+', 'NA')
                 di_minus = s.get('DI-', 'NA')
@@ -454,53 +603,67 @@ def ichi_dashboard():
                             di_minus_html = f"<span style='color:#E53935;font-size:1.22em;font-weight:900;'>DI- {di_minus}</span>"
                         if di_minus > 20 and di_plus < 20:
                             di_minus_html = f"<span style='color:#E53935;font-size:1.22em;font-weight:900;'>DI- {di_minus}</span>"
-
+                
+                # NEW: Enhanced fields
+                sr_status = s.get('SR_Status', '⚪ Unk')
+                sr_level = s.get('SR_Level', 'NA')
+                sr_dist = s.get('SR_Dist', 'NA')
+                vol_status = s.get('Vol_Status', '⚪ Unk')
+                vol_ratio = s.get('Vol_Ratio', 1.0)
+                vol_color = s.get('Vol_Color', '#ECECEC')
+                obv_div = s.get('OBV_Div', '⚪ Unk')
+                mtf_d = s.get('MTF_Daily', '⚪')
+                mtf_w = s.get('MTF_Weekly', '⚪')
+                mtf_m = s.get('MTF_Monthly', '⚪')
+                mtf_score = s.get('MTF_Score', 0)
+                
+                if sr_level != "NA":
+                    sr_display = f"{sr_status} ({sr_dist:+.1f}%)"
+                else:
+                    sr_display = sr_status
+                vol_display = f'{vol_status} <span style="color:{vol_color};">({vol_ratio:.1f}x)</span>'
+                mtf_display = f'<span style="font-weight:700;">MTF:</span> {mtf_d} {mtf_w} {mtf_m} <span style="color:#FFD700;">({mtf_score}/3)</span>'
+                
                 tview_url = f"https://www.tradingview.com/chart/WGKkLmP8/?symbol=NSE:{symbol.replace('.NS','')}"
-                left_rows = [
-                    f"D: <b>{d_val}</b>",
-                    ema_comp_html,
-                    supertrend_html,
+                left_rows = [f"D: <b>{d_val}</b>", ema_comp_html, supertrend_html]
+                right_rows = [f"RSI: {daily_rsi_html}", f"OBV: {obv_arrow}", shr_html, mw_label]
+                
+                # NEW: Enhanced section
+                enhanced_rows = [
+                    f"<div style='font-size:0.96em;color:#ECECEC;margin-bottom:2px;'>{sr_display}</div>",
+                    f"<div style='font-size:0.96em;color:#ECECEC;margin-bottom:2px;'>{vol_display}</div>",
+                    f"<div style='font-size:0.96em;color:#ECECEC;margin-bottom:2px;'>OBV: {obv_div}</div>",
+                    f"<div style='font-size:0.96em;color:#ECECEC;margin-bottom:2px;'>{mtf_display}</div>"
                 ]
-                right_rows = [
-                    f"RSI: {daily_rsi_html}",
-                    f"OBV: {obv_arrow}",
-                    shr_html,
-                    mw_label,
-                ]
-                left_html = "".join([f"<div style='font-size:1.05em;color:#ECECEC;margin-bottom:3px;'> {row}</div>" for row in left_rows])
-                right_html = "".join([f"<div style='font-size:1.05em;margin-bottom:3px;'> {row}</div>" for row in right_rows])
+                
+                left_html = "".join([f"<div style='font-size:1.05em;color:#ECECEC;margin-bottom:3px;'>{row}</div>" for row in left_rows])
+                right_html = "".join([f"<div style='font-size:1.05em;margin-bottom:3px;'>{row}</div>" for row in right_rows])
+                enhanced_html = "".join(enhanced_rows)
+                
                 tcol.markdown(f"""
-                <div style="background:#252525;border-radius:16px;width:338px;height:246px;position:relative;box-shadow:1px 2px 10px #111;margin-bottom:20px;display:flex;flex-direction:column;align-items:center;border:1px solid #333;">
-                  <div style="width:100%;text-align:center;margin-top:8px;">
-                    <a href="{tview_url}" target="_blank" style="color:#fff;font-size:1.15em;font-weight:700;text-decoration:none;">
-                      {name}
-                    </a>
+                <div style="background:#252525;border-radius:16px;width:380px;height:400px;position:relative;box-shadow:1px 2px 10px #111;margin-bottom:20px;border:1px solid #333;overflow:hidden;">
+                  <div style="width:100%;text-align:center;padding-top:6px;">
+                    <a href="{tview_url}" target="_blank" style="color:#fff;font-size:1.35em;font-weight:700;text-decoration:none;">{name}</a>
                   </div>
-                  <div style="width:100%; position:relative;">
-                    <div style="position:absolute;right:20px;top:-12px; font-size:0.93em;color:#ECECEC;text-align:right;">
-                        Lot: <span style="font-weight:bold;">{lot}</span>
-                    </div>
+                  <div style="position:absolute;right:20px;top:6px;font-size:0.93em;color:#ECECEC;">Lot: <span style="font-weight:bold;">{lot}</span></div>
+                  <div style="width:100%;text-align:center;margin-top:4px;margin-bottom:4px;">
+                    <span style="font-size:1.14em;color:{price_color};font-weight:700;">{price_str}<span style="font-size:1.3em;">{arrow}</span><span style="color:{price_color};margin-left:6px;font-size:0.98em">{change_str} ({pct_str})</span></span>
                   </div>
-                  <div style="width:100%;text-align:center;margin-top:5px;margin-bottom:5px;">
-                    <span style="font-size:1.16em;color:{price_color};font-weight:700;">
-                      {price_str}
-                      <span style="font-size:1.13em;">{arrow}</span>
-                      <span style="color:{price_color};margin-left:6px;font-size:1em">{change_str} ({pct_str})</span>
-                    </span>
+                  <div style="display:flex;flex-direction:row;width:100%;justify-content:space-between;padding:0 12px;margin-bottom:4px;">
+                    <div style="text-align:left;width:48%">{left_html}</div>
+                    <div style="text-align:right;width:48%">{right_html}</div>
                   </div>
-                  <div style="display:flex;flex-direction:row;width:100%;justify-content:space-between;margin-top:3px;">
-                    <div style="padding-left:12px;text-align:left;width:48%">{left_html}</div>
-                    <div style="padding-right:12px;text-align:right;width:48%">{right_html}</div>
-                  </div>
-                  <div style="position:absolute;bottom:8px;width:100%;text-align:center;">
-                    {di_plus_html}
-                    &nbsp; {di_minus_html}
-                    &nbsp; <span style="font-size:1em; color:#FF1493; font-weight:700;">ADX {adx_val}</span>
+                  <div style="width:90%;border-top:1px solid #444;margin:4px auto;"></div>
+                  <div style="width:100%;padding:0 12px 4px 12px;">{enhanced_html}</div>
+                  <div style="width:90%;border-top:1px solid #444;margin:4px auto;"></div>
+                  <div style="width:100%;text-align:center;padding:6px 0 8px 0;">
+                    {di_plus_html}&nbsp; {di_minus_html}&nbsp; <span style="font-size:1em;color:#FF1493;font-weight:700;">ADX {adx_val}</span>
                   </div>
                 </div>
                 """, unsafe_allow_html=True)
         if not tiles:
             col.write("No stocks matched.")
+
 
 if __name__ == "__main__":
     ichi_dashboard()
