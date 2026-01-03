@@ -528,7 +528,7 @@ def render_confluence_tile(stock_data, fo_df):
     if opt_pcr != 0:
         opt_display += f" ({opt_pcr})"
 
-    tview_url = f"https://www.tradingview.com/chart/HHuUSOTG/?symbol=NSE:{symbol_clean}"
+    tview_url = f"https://www.tradingview.com/chart/0EhGkhFw/?symbol=NSE:{symbol_clean}"
 
     return f"""
     <div style="background:#252525;border-radius:14px;width:380px;height:630px;position:relative;box-shadow:2px 4px 12px #000;margin-bottom:15px;border:2px solid {score_color};overflow:hidden;">
@@ -597,7 +597,61 @@ def confluence_scanner_dashboard():
         get_confluence_scan_data.clear()
         fetch_fii_dii_data.clear()
         st.rerun()
+    # ========== COPY THIS ENTIRE BLOCK (SIMPLIFIED VERSION) ==========
 
+    # Paste this RIGHT AFTER the refresh button section
+    # and RIGHT BEFORE: try: fo_df = pd.read_csv...
+
+    # ─────────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("<div style='font-size:1.5em;font-weight:700;color:#FFD700;text-align:center;'>🔍 Quick Symbol Analysis 🔍</div>", unsafe_allow_html=True)
+
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        manual_symbol = st.text_input("Enter Stock Symbol:", key="manual_symbol_input", placeholder="e.g., RELIANCE")
+
+    with col2:
+        analyze_button = st.button("🔍 Analyze", key="analyze_manual", use_container_width=True)
+
+    if analyze_button and manual_symbol:
+        with st.spinner(f"Analyzing {manual_symbol.upper()}..."):
+            try:
+                symbol_clean = manual_symbol.strip().upper()
+                if not symbol_clean.endswith('.NS'):
+                    symbol_clean = symbol_clean + '.NS'
+
+                ticker = yf.Ticker(symbol_clean)
+                df = ticker.history(period='2y')
+
+                if df.empty or len(df) < 100:
+                    st.error(f"❌ Need at least 100 days of data for {manual_symbol.upper()}")
+                else:
+                    df.index = pd.to_datetime(df.index)
+                    result = calculate_confluence_score(symbol_clean, df)
+
+                    if result:
+                        st.success(f"✅ Analysis Complete!")
+
+                        try:
+                            fo_df_temp = pd.read_csv('fo_stock_list.csv')
+                        except:
+                            fo_df_temp = pd.DataFrame()
+
+                        st.markdown(render_confluence_tile(result, fo_df_temp), unsafe_allow_html=True)
+                    else:
+                        st.error("❌ Could not calculate confluence score")
+
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+
+    elif analyze_button:
+        st.warning("⚠️ Please enter a symbol!")
+
+    st.markdown("---")
+    # ─────────────────────────────────────────────────────────────────
+    # END OF COPY-PASTE BLOCK
+    
     try:
         fo_df = pd.read_csv('fo_stock_list.csv')
     except FileNotFoundError:
