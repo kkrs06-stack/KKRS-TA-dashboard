@@ -13,7 +13,218 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 warnings.filterwarnings("ignore")
 
 
-# ========== Helper Functions ==========
+# ========== NEW: Core Enhancement Functions ==========
+
+def calculate_support_resistance_fib(df, window=20):
+    """
+    Calculate support/resistance using:
+    1. Swing highs/lows (last 20 days)
+    2. 52-week high/low
+    3. Fibonacci retracement levels
+    """
+    try:
+        # Get recent swing points
+        highs = df['High'].tail(window)
+        lows = df['Low'].tail(window)
+        
+        swing_high = highs.max()
+        swing_low = lows.min()
+        
+        # 52-week high/low
+        week_52_high = df['High'].tail(252).max()
+        week_52_low = df['Low'].tail(252).min()
+        
+        # Fibonacci levels (from 52W high to low)
+        fib_range = week_52_high - week_52_low
+        fib_levels = {
+            'fib_0': week_52_low,
+            'fib_236': week_52_low + (fib_range * 0.236),
+            'fib_382': week_52_low + (fib_range * 0.382),
+            'fib_500': week_52_low + (fib_range * 0.500),
+            'fib_618': week_52_low + (fib_range * 0.618),
+            'fib_786': week_52_low + (fib_range * 0.786),
+            'fib_100': week_52_high
+        }
+        
+        # Combine all levels
+        all_support_levels = [swing_low, week_52_low] + [fib_levels[k] for k in ['fib_236', 'fib_382', 'fib_500']]
+        all_resistance_levels = [swing_high, week_52_high] + [fib_levels[k] for k in ['fib_618', 'fib_786']]
+        
+        return {
+            'support_levels': sorted(all_support_levels),
+            'resistance_levels': sorted(all_resistance_levels, reverse=True),
+            'swing_high': swing_high,
+            'swing_low': swing_low,
+            'week_52_high': week_52_high,
+            'week_52_low': week_52_low,
+            'fib_levels': fib_levels
+        }
+    except:
+        return None
+
+
+def get_sr_status(price, sr_data, threshold=0.02):
+    """
+    Determine if price is at support, resistance, or mid-range
+    threshold = 2% proximity
+    """
+    if sr_data is None:
+        return "⚪ Unknown", None, None
+    
+    try:
+        price = float(price)
+        
+        # Check 52-week extremes first
+        dist_to_52w_high = ((sr_data['week_52_high'] - price) / price) * 100
+        dist_to_52w_low = ((price - sr_data['week_52_low']) / price) * 100
+        
+        if abs(dist_to_52w_high) < 2:
+            return "⚠️ Near 52W High", sr_data['week_52_high'], dist_to_52w_high
+        if abs(dist_to_52w_low) < 2:
+            return "⚠️ Near 52W Low", sr_data['week_52_low'], -dist_to_52w_low
+        
+        # Check support levels
+        for support in sr_data['support_levels']:
+            dist = ((price - support) / support) * 100
+            if abs(dist) < threshold * 100:  # within 2%
+                return f"🟢 At Support", support, dist
+        
+        # Check resistance levels
+        for resistance in sr_data['resistance_levels']:
+            dist = ((resistance - price) / price) * 100
+            if abs(dist) < threshold * 100:  # within 2%
+                return f"🔴 At Resistance", resistance, dist
+        
+        # Mid-range
+        return "🟡 Mid-range", None, None
+        
+    except:
+        return "⚪ Unknown", None, None
+
+
+def check_volume_status(df, lookback=20):
+    """Check current volume vs average"""
+    try:
+        current_vol = df['Volume'].iloc[-1]
+        avg_vol = df['Volume'].tail(lookback).mean()
+        ratio = current_vol / avg_vol if avg_vol > 0 else 1
+        
+        if ratio > 1.5:
+            return "✓ High Vol", ratio, "#37F553"
+        elif ratio < 0.8:
+            return "✗ Low Vol", ratio, "#FF3A3A"
+        else:
+            return "→ Avg Vol", ratio, "#FFD700"
+    except:
+        return "⚪ Unknown", 1.0, "#ECECEC"
+
+
+def detect_obv_divergence_enhanced(df, lookback=14):
+    """
+    Detect OBV divergence (bullish/bearish)
+    Returns: divergence type and signal
+    """
+    try:
+        # Calculate OBV
+        obv = [0]
+        for i in range(1, len(df)):
+            if df['Close'].iloc[i] > df['Close'].iloc[i-1]:
+                obv.append(obv[-1] + df['Volume'].iloc[i])
+            elif df['Close'].iloc[i] < df['Close'].iloc[i-1]:
+                obv.append(obv[-1] - df['Volume'].iloc[i])
+            else:
+                obv.append(obv[-1])
+        
+        df_temp = df.copy()
+        df_temp['OBV'] = obv
+        
+        # Find peaks and troughs
+        price = df_temp['Close'].values
+        obv_vals = df_temp['OBV'].values
+        
+        price_lows = scipy.signal.argrelextrema(price, np.less, order=lookback)[0]
+        price_highs = scipy.signal.argrelextrema(price, np.greater, order=lookback)[0]
+        
+        obv_lows = scipy.signal.argrelextrema(obv_vals, np.less, order=lookback)[0]
+        obv_highs = scipy.signal.argrelextrema(obv_vals, np.greater, order=lookback)[0]
+        
+        # Bullish divergence: price makes lower low, OBV makes higher low
+        bull_div = False
+        if len(price_lows) >= 2 and len(obv_lows) >= 2:
+            if (price[price_lows[-1]] < price[price_lows[-2]] and 
+                obv_vals[obv_lows[-1]] > obv_vals[obv_lows[-2]]):
+                bull_div = True
+        
+        # Bearish divergence: price makes higher high, OBV makes lower high
+        bear_div = False
+        if len(price_highs) >= 2 and len(obv_highs) >= 2:
+            if (price[price_highs[-1]] > price[price_highs[-2]] and 
+                obv_vals[obv_highs[-1]] < obv_vals[obv_highs[-2]]):
+                bear_div = True
+        
+        # OBV trend
+        obv_now = obv[-1]
+        obv_prev = obv[-lookback-1] if len(obv) > lookback else obv[0]
+        obv_trend = "↑" if obv_now > obv_prev else "↓" if obv_now < obv_prev else "→"
+        
+        if bull_div:
+            return f"{obv_trend} 🟢 Bull Div", "bull_div"
+        elif bear_div:
+            return f"{obv_trend} 🔴 Bear Div", "bear_div"
+        else:
+            return f"{obv_trend} → No Div", "no_div"
+            
+    except:
+        return "⚪ Unknown", "unknown"
+
+
+def multi_timeframe_alignment(symbol, data_dict):
+    """
+    Check if price > SMA20 on Daily, Weekly, Monthly
+    Returns: status for each TF and alignment score
+    """
+    try:
+        df_d = data_dict.get(symbol)
+        if df_d is None or len(df_d) < 60:
+            return "⚪", "⚪", "⚪", 0
+        
+        # Daily
+        sma20_d = df_d['Close'].rolling(20).mean().iloc[-1]
+        price = df_d['Close'].iloc[-1]
+        daily_ok = price > sma20_d
+        
+        # Weekly
+        df_w = df_d['Close'].resample('W-FRI').last().dropna().to_frame()
+        if len(df_w) >= 20:
+            sma20_w = df_w['Close'].rolling(20).mean().iloc[-1]
+            weekly_ok = price > sma20_w
+        else:
+            weekly_ok = None
+        
+        # Monthly
+        df_m = df_d['Close'].resample('M').last().dropna().to_frame()
+        if len(df_m) >= 20:
+            sma20_m = df_m['Close'].rolling(20).mean().iloc[-1]
+            monthly_ok = price > sma20_m
+        else:
+            monthly_ok = None
+        
+        # Format output
+        d_symbol = "✓" if daily_ok else "✗"
+        w_symbol = "✓" if weekly_ok else ("⚪" if weekly_ok is None else "✗")
+        m_symbol = "✓" if monthly_ok else ("⚪" if monthly_ok is None else "✗")
+        
+        # Calculate score (out of 3)
+        score = sum([1 for x in [daily_ok, weekly_ok, monthly_ok] if x is True])
+        
+        return d_symbol, w_symbol, m_symbol, score
+        
+    except:
+        return "⚪", "⚪", "⚪", 0
+
+
+# ========== Original Helper Functions ==========
+
 def detect_rsi_divergence(df, rsi_col='RSI', lookback=14):
     price = df['Close']
     rsi = df[rsi_col]
@@ -106,17 +317,17 @@ def obv_calc(df):
 def obv_trend_arrow(df, period):
     obv = obv_calc(df)
     if len(obv) < period + 1:
-        return "<span style='font-size:1.15em;color:#FF69B4;'>–</span>"
+        return "<span style='font-size:1.35em;color:#FF69B4;'>–</span>"
     obv_now = obv.iloc[-1]
     obv_prev = obv.iloc[-period-1]
     flat_threshold = 0.005 * abs(obv_now)
     diff = obv_now - obv_prev
     if diff > flat_threshold:
-        return "<span style='font-size:1.15em;color:#37F553;'>↑</span>"
+        return "<span style='font-size:1.35em;color:#37F553;'>↑</span>"
     elif diff < -flat_threshold:
-        return "<span style='font-size:1.15em;color:#FF3A3A;'>↓</span>"
+        return "<span style='font-size:1.35em;color:#FF3A3A;'>↓</span>"
     else:
-        return "<span style='font-size:1.15em;color:#FF69B4;'>–</span>"
+        return "<span style='font-size:1.35em;color:#FF69B4;'>–</span>"
 
 
 def supertrend_tradingview_wilder(df, period=10, multiplier=3.0):
@@ -320,6 +531,14 @@ def process_single_stock(args):
     else:
         supertrend_val, supertrend_dir = "NA", "NA"
     
+    # NEW: Calculate enhanced metrics (except MTF - will be done later)
+    sr_data = calculate_support_resistance_fib(df_d, window=20)
+    sr_status, sr_level, sr_dist = get_sr_status(close_now, sr_data)
+    
+    vol_status, vol_ratio, vol_color = check_volume_status(df_d, lookback=20)
+    
+    obv_div_text, obv_div_type = detect_obv_divergence_enhanced(df_d, lookback=14)
+    
     result_data = {
         'Name': name,
         'Symbol': symbol,
@@ -341,16 +560,25 @@ def process_single_stock(args):
         'SHR_DOT': shr_dot,
         'SHR_K': shr_k_val,
         'SHR_D': shr_d_val,
-        'cross_type': 'above' if cond_cross_above else 'below'
+        'cross_type': 'above' if cond_cross_above else 'below',
+        # NEW FIELDS
+        'SR_Status': sr_status,
+        'SR_Level': round(sr_level, 2) if sr_level else "NA",
+        'SR_Dist': round(sr_dist, 2) if sr_dist else "NA",
+        'Vol_Status': vol_status,
+        'Vol_Ratio': round(vol_ratio, 2),
+        'Vol_Color': vol_color,
+        'OBV_Div': obv_div_text,
+        'OBV_Div_Type': obv_div_type,
+        # MTF will be added in batch_analyze_all
     }
     
     return result_data
 
-
 # ========== Optimized Batch Analyzer with Parallel Processing ==========
 @st.cache_data(show_spinner="Calculating indicator tiles in parallel...")
 def batch_analyze_all(data_dict, fo_df):
-    """Parallel processing version"""
+    """Parallel processing version with post-MTF calculation"""
     
     # Prepare arguments for parallel processing
     args_list = []
@@ -375,12 +603,65 @@ def batch_analyze_all(data_dict, fo_df):
             except:
                 pass
     
+    # NOW calculate MTF for each result (in main thread with full data_dict access)
+    for result in results:
+        symbol = result['Symbol']
+        try:
+            df_d = data_dict.get(symbol)
+            if df_d is not None and len(df_d) >= 60:
+                # Get current price
+                price = float(df_d['Close'].iloc[-1])
+                
+                # Daily SMA20
+                sma20_d = float(df_d['Close'].rolling(20).mean().iloc[-1])
+                daily_ok = price > sma20_d
+                
+                # Weekly SMA20
+                weekly_ok = None
+                try:
+                    df_w_close = df_d['Close'].resample('W-FRI').last().dropna()
+                    if len(df_w_close) >= 20:
+                        sma20_w = float(df_w_close.rolling(20).mean().iloc[-1])
+                        weekly_ok = price > sma20_w
+                except:
+                    weekly_ok = None
+                
+                # Monthly SMA20
+                monthly_ok = None
+                try:
+                    df_m_close = df_d['Close'].resample('M').last().dropna()
+                    if len(df_m_close) >= 20:
+                        sma20_m = float(df_m_close.rolling(20).mean().iloc[-1])
+                        monthly_ok = price > sma20_m
+                except:
+                    monthly_ok = None
+                
+                # Format output symbols
+                result['MTF_Daily'] = "✓" if daily_ok else "✗"
+                result['MTF_Weekly'] = "✓" if weekly_ok is True else ("⚪" if weekly_ok is None else "✗")
+                result['MTF_Monthly'] = "✓" if monthly_ok is True else ("⚪" if monthly_ok is None else "✗")
+                
+                # Calculate score
+                result['MTF_Score'] = sum([1 for x in [daily_ok, weekly_ok, monthly_ok] if x is True])
+                
+            else:
+                result['MTF_Daily'] = "⚪"
+                result['MTF_Weekly'] = "⚪"
+                result['MTF_Monthly'] = "⚪"
+                result['MTF_Score'] = 0
+                
+        except Exception as e:
+            # If any error, set to unknown
+            result['MTF_Daily'] = "⚪"
+            result['MTF_Weekly'] = "⚪"
+            result['MTF_Monthly'] = "⚪"
+            result['MTF_Score'] = 0
+    
     # Separate long and short
     long_results = [r for r in results if r['cross_type'] == 'above']
     short_results = [r for r in results if r['cross_type'] == 'below']
     
     return long_results, short_results
-
 
 def get_above_sma_labels(symbol, data_dict):
     try:
@@ -412,28 +693,32 @@ def get_above_sma_labels(symbol, data_dict):
 def just_above_below_dashboard():
     today_str = datetime.datetime.now().strftime("%d-%b-%Y")
     st.markdown(
-        "<div style='font-size:2em;font-weight:800;color:#FFD700;padding-bottom:2px;'>Just Above/Below</div>",
+        "<div style='font-size:2em;font-weight:800;color:#FFD700;padding-bottom:2px;'>Just Above/Below - Enhanced</div>",
         unsafe_allow_html=True)
     st.markdown(
         f"<div style='text-align:right;font-size:1.2em;color:#FFD700;font-weight:700;padding-top:4px;'>{today_str}</div>",
         unsafe_allow_html=True)
+    
     obv_period = st.slider('OBV Trend Lookback Period (days)', min_value=5, max_value=30, value=10, step=1)
-    st.markdown("<h2 style='font-size:1.30em; text-align:center; margin-bottom:10px;color:#FFD700;'>Just Above/Below</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='font-size:1.30em; text-align:center; margin-bottom:10px;color:#FFD700;'>Just Above/Below with S/R, Volume & MTF Confluence</h2>", unsafe_allow_html=True)
+    
     if st.button("🔄 Refresh Data", key="refresh_sma20"):
         fetch_all_ohlcv.clear()
         batch_analyze_all.clear()
+    
     fo_df = process_fo_stock_list()
     if fo_df.empty:
         return
+    
     ticker_list = list(fo_df['symbol'])
     data_dict = fetch_all_ohlcv(ticker_list)
     long_results, short_results = batch_analyze_all(data_dict, fo_df)
+    
     cols = st.columns(2)
     section_titles = ["Long", "Short"]
     section_colors = ["#18AA47", "#E53935"]
     section_dots = ["#80D8FF", "#FFA500"]
     section_tiles = [long_results, short_results]
-
 
     for idx, col in enumerate(cols):
         col.markdown(f'''
@@ -441,6 +726,7 @@ def just_above_below_dashboard():
             <span style="color:{section_dots[idx]};font-size:1.42em;font-weight:700;">&#x25CF;</span>
             <span style="color:#FFFFFF;font-size:1.19em;font-weight:700;letter-spacing:2px;">{section_titles[idx]}</span></div>
         ''', unsafe_allow_html=True)
+        
         tiles = section_tiles[idx]
         for i in range(0, len(tiles), 2):
             row_tiles = tiles[i:i+2]
@@ -471,6 +757,7 @@ def just_above_below_dashboard():
                 macd_color = "#37F553" if macd > macd_signal else "#FF3A3A"
                 gap_label = gap_ema50_label(price, ema50_val, d_val, section_type)
                 mw_label = get_above_sma_labels(symbol, data_dict)
+                
                 if supertrend_dir == "UP":
                     st_dir_col = "#37F553"
                 elif supertrend_dir == "DOWN":
@@ -478,8 +765,10 @@ def just_above_below_dashboard():
                 else:
                     st_dir_col = "#FFD700"
                 supertrend_html = f"ST: <b>{supertrend_val}</b> <span style='color:{st_dir_col};font-weight:900;font-size:1.12em'>{supertrend_dir}</span>"
+                
                 di_plus_html = f"<span style='color:#18AA47;font-size:1em;'>DI+ {di_plus}</span>"
                 di_minus_html = f"<span style='color:#E53935;font-size:1em;'>DI- {di_minus}</span>"
+                
                 if idx == 0:
                     if di_plus is not None and di_minus is not None:
                         if di_plus > di_minus:
@@ -492,15 +781,46 @@ def just_above_below_dashboard():
                             di_minus_html = f"<span style='color:#E53935;font-size:1.22em;font-weight:900;'>DI- {di_minus}</span>"
                         if di_minus > 20 and di_plus < 20:
                             di_minus_html = f"<span style='color:#E53935;font-size:1.22em;font-weight:900;'>DI- {di_minus}</span>"
+                
                 tview_url = f"https://www.tradingview.com/chart/HHuUSOTG/?symbol=NSE:{symbol.replace('.NS','')}"
+                
+                # NEW: Enhanced fields
+                sr_status = s.get('SR_Status', '⚪ Unknown')
+                sr_level = s.get('SR_Level', 'NA')
+                sr_dist = s.get('SR_Dist', 'NA')
+                
+                vol_status = s.get('Vol_Status', '⚪ Unknown')
+                vol_ratio = s.get('Vol_Ratio', 1.0)
+                vol_color = s.get('Vol_Color', '#ECECEC')
+                
+                obv_div = s.get('OBV_Div', '⚪ Unknown')
+                
+                mtf_d = s.get('MTF_Daily', '⚪')
+                mtf_w = s.get('MTF_Weekly', '⚪')
+                mtf_m = s.get('MTF_Monthly', '⚪')
+                mtf_score = s.get('MTF_Score', 0)
+                
+                # Format S/R display
+                if sr_level != "NA":
+                    sr_display = f"{sr_status} ({sr_dist:+.1f}%)"
+                else:
+                    sr_display = sr_status
+                
+                # Format Volume display
+                vol_display = f'{vol_status} <span style="color:{vol_color};">({vol_ratio:.1f}x)</span>'
+                
+                # Format MTF display
+                mtf_display = f'<span style="font-weight:700;">MTF:</span> {mtf_d} {mtf_w} {mtf_m} <span style="color:#FFD700;">({mtf_score}/3)</span>'
+                
                 left_rows = [
                     f"D: <b>{d_val}</b>",
                     ema_comp_html,
                     supertrend_html,
                     f"RSI: {daily_rsi_html}",
                     f"OBV: {obv_arrow}",
+                    shr_html,
                 ]
-                left_rows.append(shr_html)
+                
                 try:
                     df_d = data_dict.get(symbol)
                     df_d['RSI'] = ta.momentum.RSIIndicator(df_d['Close'], 14).rsi()
@@ -510,7 +830,9 @@ def just_above_below_dashboard():
                     rsi_div_w = detect_rsi_divergence(df_w, lookback=14)
                 except Exception:
                     rsi_div_d, rsi_div_w = None, None
+                
                 rdiv_html = format_rdiv(rsi_div_d, rsi_div_w)
+                
                 right_rows = [
                     f"ATR: <b>{s.get('ATR14','')}</b>",
                     f"MACD: <span style='color:{macd_color};font-weight:700;'>{macd}</span>",
@@ -520,40 +842,73 @@ def just_above_below_dashboard():
                     mw_label,
                     rdiv_html
                 ]
+                
+                # NEW SECTION - Enhanced metrics
+                enhanced_rows = [
+                    f"<div style='font-size:0.98em;color:#ECECEC;margin-bottom:3px;'>{sr_display}</div>",
+                    f"<div style='font-size:0.98em;color:#ECECEC;margin-bottom:3px;'>{vol_display}</div>",
+                    f"<div style='font-size:0.98em;color:#ECECEC;margin-bottom:3px;'>OBV: {obv_div}</div>",
+                    f"<div style='font-size:0.98em;color:#ECECEC;margin-bottom:3px;'>{mtf_display}</div>"
+                ]
+                
                 left_html = "".join([f"<div style='font-size:1.03em;color:#ECECEC;margin-bottom:2px;'>{row}</div>" for row in left_rows])
                 right_html = "".join([f"<div style='font-size:1.03em;margin-bottom:2px;'>{row}</div>" for row in right_rows])
+                enhanced_html = "".join(enhanced_rows)
+                
+                                # TILE: 380px width x 440px height (INCREASED for ADX visibility)
+                                # TILE: 380px width x 460px height (FINAL FIX)
                 tcol.markdown(f"""
-                <div style="background:#252525;border-radius:16px;width:340px;height:320px;position:relative;box-shadow:1px 2px 10px #111;margin-bottom:20px;display:flex;flex-direction:column;align-items:center;border:1px solid #333;">
-                  <div style="width:100%;text-align:center;margin-top:8px;">
-                    <a href="{tview_url}" target="_blank" style="color:#fff;font-size:1.15em;font-weight:700;text-decoration:none;">
+                <div style="background:#252525;border-radius:16px;width:380px;height:460px;position:relative;box-shadow:1px 2px 10px #111;margin-bottom:20px;border:1px solid #333;overflow:hidden;">
+                  
+                  <!-- Stock Name & Lot -->
+                  <div style="width:100%;text-align:center;padding-top:8px;">
+                    <a href="{tview_url}" target="_blank" style="color:#fff;font-size:1.35em;font-weight:700;text-decoration:none;">
                       {name}
                     </a>
                   </div>
-                  <div style="width:100%; position:relative;">
-                    <div style="position:absolute;right:20px;top:-12px; font-size:0.93em;color:#ECECEC;text-align:right;">
-                        Lot: <span style="font-weight:bold;">{lot}</span>
-                    </div>
+                  <div style="position:absolute;right:20px;top:8px;font-size:0.93em;color:#ECECEC;">
+                    Lot: <span style="font-weight:bold;">{lot}</span>
                   </div>
-                  <div style="width:100%;text-align:center;margin-top:5px;margin-bottom:5px;">
+                  
+                  <!-- Price Section -->
+                  <div style="width:100%;text-align:center;margin-top:5px;margin-bottom:6px;">
                     <span style="font-size:1.16em;color:{price_color};font-weight:700;">
                       {price_str}
                       <span style="font-size:1.13em;">{arrow}</span>
                       <span style="color:{price_color};margin-left:6px;font-size:1em">{change_str} ({pct_str})</span>
                     </span>
                   </div>
-                  <div style="display:flex;flex-direction:row;width:100%;justify-content:space-between;margin-top:8px;">
-                    <div style="padding-left:16px;text-align:left;">
+                  
+                  <!-- Main Indicators (Left & Right) -->
+                  <div style="display:flex;flex-direction:row;width:100%;justify-content:space-between;padding:0 16px;margin-bottom:6px;">
+                    <div style="text-align:left;">
                         {left_html}
                     </div>
-                    <div style="padding-right:16px;text-align:right;">
+                    <div style="text-align:right;">
                         {right_html}
                     </div>
                   </div>
-                  <div style="position:absolute;bottom:11px;width:100%;text-align:center;">
-                    {di_plus_html}
-                    &nbsp; {di_minus_html}
-                    &nbsp; <span style="font-size:1em; color:#FF1493; font-weight:700;">ADX {s.get('ADX14','')}</span>
+                  
+                  <!-- Separator -->
+                  <div style="width:90%;border-top:1px solid #444;margin:6px auto;"></div>
+                  
+                  <!-- Enhanced Metrics Section (NEW) -->
+                  <div style="width:100%;padding:0 16px 6px 16px;">
+                    {enhanced_html}
                   </div>
+                  
+                  <!-- Separator -->
+                  <div style="width:90%;border-top:1px solid #444;margin:6px auto;"></div>
+                  
+                  <!-- DI+/DI-/ADX Section (Bottom - FIXED POSITIONING) -->
+                  <div style="width:100%;text-align:center;padding:10px 0 14px 0;">
+                    <span style="font-size:1.05em;">{di_plus_html}</span>
+                    &nbsp;&nbsp;
+                    <span style="font-size:1.05em;">{di_minus_html}</span>
+                    &nbsp;&nbsp;
+                    <span style="font-size:1.05em;color:#FF1493;font-weight:700;">ADX {s.get('ADX14','')}</span>
+                  </div>
+                  
                 </div>
                 """, unsafe_allow_html=True)
         if not tiles:
