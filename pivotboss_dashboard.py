@@ -430,11 +430,11 @@ class PivotBossEngine:
             except Exception:
                 di_pos, di_neg = np.nan, np.nan
 
-            print(
-                f"{symbol}: signal={signal}, strength={strength}, "
-                f"base_long={base_long}, base_short={base_short}, "
-                f"vol_ok={vol_ok}, buy_delta={buy_delta}, sell_delta={sell_delta}"
-            )
+            #print(
+            #    f"{symbol}: signal={signal}, strength={strength}, "
+            #    f"base_long={base_long}, base_short={base_short}, "
+            #    f"vol_ok={vol_ok}, buy_delta={buy_delta}, sell_delta={sell_delta}"
+            #)
             return {
                 "Symbol": symbol.replace(".NS", ""),
                 "CurrentPrice": round(current_price, 2),
@@ -617,8 +617,8 @@ def batch_scan_pivotboss(data_dict, fo_df, config):
                     results.append(r)
             except:
                 pass
-        print(f"DEBUG: total results={len(results)}")
-        print(f"DEBUG: distinct signals={[r['Signal'] for r in results][:20]}")
+        #print(f"DEBUG: total results={len(results)}")
+        #print(f"DEBUG: distinct signals={[r['Signal'] for r in results][:20]}")
 
     long_res = [r for r in results if r["Signal"] == "LONG"]
     short_res = [r for r in results if r["Signal"] == "SHORT"]
@@ -736,7 +736,8 @@ def rendertiles(stocks, signaltype, fodf):
             )
             enhancedhtml = "\n".join(enhancedrows)
 
-            tviewurl = f"https://www.tradingview.com/chart/?symbol=NSE%3A{symbol_clean}"
+            #tviewurl = f"https://www.tradingview.com/chart/?symbol=NSE%3A{symbol_clean}"
+            tviewurl = f"https://www.tradingview.com/chart/RaPnty9s/?symbol=NSE%3A{symbol_clean}"
 
             if signal.startswith("LONG"):
                 sig_bg = "#18AA47"
