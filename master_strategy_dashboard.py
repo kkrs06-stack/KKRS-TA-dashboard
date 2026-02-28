@@ -17,6 +17,9 @@ from daily_weekly_dashboard import daily_weekly_dashboard
 from ss_strat_dashboard import ss_strat_dashboard, get_ssstrat_stock_data_optimized
 from ichi import ichi_dashboard
 from confluence_dashboard import confluence_scanner_dashboard
+#from pivotboss_dashboard import run_pivotboss_tab as pivotboss_dashboard
+from pivotboss_dashboard import run_pivotboss_tab as pivotboss_dashboard
+
 
 warnings.filterwarnings("ignore")
 
@@ -89,6 +92,7 @@ STRATEGIES = [
     {"label": "Ichi", "id": "ichi"},
     {"label": "RKO", "id": "rko"},
     {"label": "Confluence", "id": "confluence"},  # ← ADD THIS LINE
+    {"label": "PVB Signal", "id": "pivotboss"},  # ← ADD THIS LINE
 ]
 
 # ========== ENHANCEMENT FUNCTIONS (MATCHING JUST ABOVE/BELOW FORMAT) ==========
@@ -914,6 +918,8 @@ elif selected == "ichi":
     ichi_dashboard()
 elif selected == "confluence":
     confluence_scanner_dashboard()
+elif selected == "pivotboss":
+    pivotboss_dashboard()
 elif selected == "rko":
     st.markdown("<div style='font-size:2.0em;font-weight:800;color:#FFD700;padding-bottom:10px;text-align:center;'>🔥 RKO - Enhanced Renko Scanner 🔥</div>", unsafe_allow_html=True)
     st.markdown("<div style='text-align:center;font-size:1.2em;color:#37F553;font-weight:700;padding:4px;'>✅ S/R Detection | ✅ Volume Analysis | ✅ OBV Divergence | ✅ MTF Alignment</div>", unsafe_allow_html=True)
