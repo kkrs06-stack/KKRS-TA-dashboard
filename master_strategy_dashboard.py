@@ -19,7 +19,7 @@ from ichi import ichi_dashboard
 from confluence_dashboard import confluence_scanner_dashboard
 #from pivotboss_dashboard import run_pivotboss_tab as pivotboss_dashboard
 from pivotboss_dashboard import run_pivotboss_tab as pivotboss_dashboard
-
+from cpr_pro_dashboard import run_cpr_pro_tab as cpr_pro_dashboard
 
 warnings.filterwarnings("ignore")
 
@@ -93,6 +93,7 @@ STRATEGIES = [
     {"label": "RKO", "id": "rko"},
     {"label": "Confluence", "id": "confluence"},  # ← ADD THIS LINE
     {"label": "PVB Signal", "id": "pivotboss"},  # ← ADD THIS LINE
+    {"label": "CPR PRO", "id": "cprpro"},
 ]
 
 # ========== ENHANCEMENT FUNCTIONS (MATCHING JUST ABOVE/BELOW FORMAT) ==========
@@ -802,6 +803,12 @@ def clear_all_app_cache():
         batch_analyze_ichi.clear()
     except:
         pass
+    try:
+        from cpr_pro_dashboard import fetch_ohlcv_for_cpr, batch_scan_cpr
+        fetch_ohlcv_for_cpr.clear()
+        batch_scan_cpr.clear()
+    except Exception:
+        pass    
 
 if "cache_cleared_initial" not in st.session_state:
     clear_all_app_cache()
@@ -920,6 +927,8 @@ elif selected == "confluence":
     confluence_scanner_dashboard()
 elif selected == "pivotboss":
     pivotboss_dashboard()
+elif selected == "cprpro":
+    cpr_pro_dashboard()
 elif selected == "rko":
     st.markdown("<div style='font-size:2.0em;font-weight:800;color:#FFD700;padding-bottom:10px;text-align:center;'>🔥 RKO - Enhanced Renko Scanner 🔥</div>", unsafe_allow_html=True)
     st.markdown("<div style='text-align:center;font-size:1.2em;color:#37F553;font-weight:700;padding:4px;'>✅ S/R Detection | ✅ Volume Analysis | ✅ OBV Divergence | ✅ MTF Alignment</div>", unsafe_allow_html=True)
