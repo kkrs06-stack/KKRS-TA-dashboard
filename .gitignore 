@@ -1,0 +1,14 @@
+dhan.env
+.env
+.dhan_token_cache.json
+.dhan_scrip_master.csv
+
+# Virtual environment -- never commit this, requirements.txt already
+# captures what's needed to recreate it.
+freshenv/
+venv/
+env/
+
+__pycache__/
+*.pyc
+.DS_Store
