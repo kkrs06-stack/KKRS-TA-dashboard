@@ -7,3 +7,5 @@ plotly>=5.17.0
 scipy==1.11.3
 pyotp
 pytz
+python-dotenv
+requests
