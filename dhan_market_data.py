@@ -14,7 +14,9 @@ version — or none at all — is installed.
 from __future__ import annotations
 
 import logging
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from typing import Optional
 
@@ -34,12 +36,58 @@ IST = pytz.timezone("Asia/Kolkata")
 
 # Observed empirically: Dhan's /charts/* endpoints rate-limit after only
 # ~7 rapid sequential calls (HTTP 429, errorCode DH-904). MIN_CALL_INTERVAL
-# is a proactive pause between calls in a batch loop to mostly avoid ever
-# hitting it; the backoff-retry in _post() is the reactive fallback for
-# whatever slips through.
+# is the same safe aggregate spacing as before -- 1 request initiated per
+# this many seconds, across ALL callers combined. What changed is HOW it's
+# enforced: previously a single thread slept this long AFTER each response
+# came back (so total time per call was network_latency + interval,
+# compounding serially). Now a shared _RateLimiter paces request
+# *initiation* times only, so multiple symbols' network waits can overlap
+# instead of stacking -- same total requests/second sent to Dhan, less
+# wall-clock time spent idle.
 MIN_CALL_INTERVAL_SECONDS = 0.35
 MAX_429_RETRIES = 5
 BACKOFF_BASE_SECONDS = 1.5
+BATCH_FETCH_WORKERS = 5
+
+
+class _RateLimiter:
+    """
+    Thread-safe pacing gate. Each call to wait_turn() reserves the next
+    available time slot (spaced min_interval apart from the previous
+    reservation) and returns once that slot arrives. Reservation is a brief
+    locked operation; the actual waiting happens outside the lock, so
+    threads don't block each other's network I/O -- only the request
+    *initiation* times are kept evenly spaced.
+    """
+
+    def __init__(self, min_interval: float):
+        self._min_interval = min_interval
+        self._lock = threading.Lock()
+        self._next_allowed = 0.0
+
+    def wait_turn(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._next_allowed)
+            self._next_allowed = start + self._min_interval
+        sleep_time = start - time.monotonic()
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+
+
+# Module-level singleton: shared across every DhanMarketData instance in
+# this process, so multiple scanners (CPR PRO, PivotBoss, Ichimoku, ...)
+# can't collectively exceed the same safe aggregate rate even if each
+# creates its own DhanMarketData object.
+_RATE_LIMITER = _RateLimiter(MIN_CALL_INTERVAL_SECONDS)
+
+# Option Chain is a completely separate, much stricter limit per Dhan's own
+# docs: 1 request per 3 seconds. Must NOT share the limiter above, or every
+# other endpoint would get throttled down to option-chain speed (or this
+# endpoint would blow through its own limit using the faster one).
+OPTION_CHAIN_MIN_INTERVAL_SECONDS = 3.0
+_OPTION_CHAIN_RATE_LIMITER = _RateLimiter(OPTION_CHAIN_MIN_INTERVAL_SECONDS)
+DEFAULT_FNO_EXCHANGE_SEGMENT = "NSE_FNO"
 
 
 class DhanMarketData:
@@ -103,37 +151,81 @@ class DhanMarketData:
         self, symbols: list[str], from_date: date, to_date: date
     ) -> dict[str, pd.DataFrame]:
         """
-        Sequential, throttled fetch of daily history for many symbols.
-        Failures for individual symbols are logged and skipped rather than
-        aborting the whole batch (matches this codebase's existing
-        tolerant-scan pattern elsewhere).
+        Concurrent, rate-limited fetch of daily history for many symbols.
+        Same safe aggregate request rate as a sequential loop (enforced by
+        the shared _RateLimiter inside _post()), but multiple symbols'
+        network waits overlap instead of stacking serially. Failures for
+        individual symbols are logged and skipped rather than aborting the
+        whole batch.
         """
         results = {}
-        for symbol in symbols:
-            try:
-                results[symbol] = self.get_historical_daily(symbol, from_date, to_date)
-            except Exception as exc:
-                logger.warning("Historical daily fetch failed for %s: %s", symbol, exc)
-            time.sleep(MIN_CALL_INTERVAL_SECONDS)
+        with ThreadPoolExecutor(max_workers=BATCH_FETCH_WORKERS) as executor:
+            futures = {
+                executor.submit(self.get_historical_daily, symbol, from_date, to_date): symbol
+                for symbol in symbols
+            }
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    results[symbol] = future.result()
+                except Exception as exc:
+                    logger.warning("Historical daily fetch failed for %s: %s", symbol, exc)
         return results
 
     def get_historical_intraday_batch(
         self, symbols: list[str], from_dt: datetime, to_dt: datetime, interval_minutes: int = 5
     ) -> dict[str, pd.DataFrame]:
-        """Sequential, throttled fetch of intraday history for many symbols."""
+        """Concurrent, rate-limited fetch of intraday history for many symbols."""
         results = {}
-        for symbol in symbols:
-            try:
-                results[symbol] = self.get_historical_intraday(symbol, from_dt, to_dt, interval_minutes)
-            except Exception as exc:
-                logger.warning("Historical intraday fetch failed for %s: %s", symbol, exc)
-            time.sleep(MIN_CALL_INTERVAL_SECONDS)
+        with ThreadPoolExecutor(max_workers=BATCH_FETCH_WORKERS) as executor:
+            futures = {
+                executor.submit(self.get_historical_intraday, symbol, from_dt, to_dt, interval_minutes): symbol
+                for symbol in symbols
+            }
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    results[symbol] = future.result()
+                except Exception as exc:
+                    logger.warning("Historical intraday fetch failed for %s: %s", symbol, exc)
         return results
+
+    def get_option_expiry_list(
+        self, security_id: str, exchange_segment: str = DEFAULT_FNO_EXCHANGE_SEGMENT
+    ) -> list[str]:
+        """Available expiry dates (YYYY-MM-DD) for an underlying's options."""
+        response = self._post(
+            "/optionchain/expirylist",
+            {"UnderlyingScrip": int(security_id), "UnderlyingSeg": exchange_segment},
+            rate_limiter=_OPTION_CHAIN_RATE_LIMITER,
+        )
+        return response.get("data", [])
+
+    def get_option_chain(
+        self, security_id: str, expiry: str, exchange_segment: str = DEFAULT_FNO_EXCHANGE_SEGMENT
+    ) -> dict:
+        """
+        Full option chain (OI, greeks, IV, LTP per strike) for one
+        underlying + expiry. Returns Dhan's raw response -- shape isn't
+        independently verified yet, so callers should inspect `data`
+        rather than assume a specific nesting.
+        """
+        return self._post(
+            "/optionchain",
+            {
+                "UnderlyingScrip": int(security_id),
+                "UnderlyingSeg": exchange_segment,
+                "Expiry": expiry,
+            },
+            rate_limiter=_OPTION_CHAIN_RATE_LIMITER,
+        )
 
     # -- internals ------------------------------------------------------
 
-    def _post(self, path: str, body: dict) -> dict:
+    def _post(self, path: str, body: dict, rate_limiter: "_RateLimiter" = None) -> dict:
+        limiter = rate_limiter or _RATE_LIMITER
         for attempt in range(1, MAX_429_RETRIES + 1):
+            limiter.wait_turn()
             access_token = self._token_manager.get_access_token()
             response = requests.post(
                 f"{API_BASE_URL}{path}",
