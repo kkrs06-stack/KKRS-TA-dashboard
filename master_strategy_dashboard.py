@@ -20,6 +20,8 @@ from confluence_dashboard import confluence_scanner_dashboard
 #from pivotboss_dashboard import run_pivotboss_tab as pivotboss_dashboard
 from pivotboss_dashboard import run_pivotboss_tab as pivotboss_dashboard
 from cpr_pro_dashboard import run_cpr_pro_tab as cpr_pro_dashboard
+from ichimoku_dashboard import run_ichimoku_tab as ichimoku_dashboard
+from exhaustion_dashboard import run_exhaustion_tab as exhaustion_dashboard
 
 warnings.filterwarnings("ignore")
 
@@ -85,15 +87,17 @@ st.set_page_config(layout="wide", page_title="Kamlesh TA Strategies", page_icon=
 
 today_str = datetime.datetime.now().strftime("%d-%b-%Y")
 STRATEGIES = [
-    {"label": "RSI Strategy", "id": "rsi"},
+    #{"label": "RSI Strategy", "id": "rsi"},
     {"label": "SS Strat", "id": "ssstrat"},
     {"label": "Daily > Weekly", "id": "dailyweekly"},
     {"label": "Just above/below", "id": "reversal"},
-    {"label": "Ichi", "id": "ichi"},
+    #{"label": "Ichi", "id": "ichi"},
     {"label": "RKO", "id": "rko"},
-    {"label": "Confluence", "id": "confluence"},  # ← ADD THIS LINE
+    #{"label": "Confluence", "id": "confluence"},  # ← ADD THIS LINE
     {"label": "PVB Signal", "id": "pivotboss"},  # ← ADD THIS LINE
     {"label": "CPR PRO", "id": "cprpro"},
+    {"label": "IchiMK", "id": "ichimoku"},
+    {"label": "ExhaustN", "id": "exhaustion"},
 ]
 
 # ========== ENHANCEMENT FUNCTIONS (MATCHING JUST ABOVE/BELOW FORMAT) ==========
@@ -808,7 +812,19 @@ def clear_all_app_cache():
         fetch_ohlcv_for_cpr.clear()
         batch_scan_cpr.clear()
     except Exception:
-        pass    
+        pass
+    try:
+        from ichimoku_dashboard import fetch_ohlcv_for_ichimoku, batch_scan_ichimoku
+        fetch_ohlcv_for_ichimoku.clear()
+        batch_scan_ichimoku.clear()
+    except Exception:
+        pass
+    try:
+        from exhaustion_dashboard import fetch_ohlcv_for_exhaustion, batch_scan_stage1
+        fetch_ohlcv_for_exhaustion.clear()
+        batch_scan_stage1.clear()
+    except Exception:
+        pass
 
 if "cache_cleared_initial" not in st.session_state:
     clear_all_app_cache()
@@ -929,6 +945,10 @@ elif selected == "pivotboss":
     pivotboss_dashboard()
 elif selected == "cprpro":
     cpr_pro_dashboard()
+elif selected == "ichimoku":
+    ichimoku_dashboard()    
+elif selected == "exhaustion":
+    exhaustion_dashboard()
 elif selected == "rko":
     st.markdown("<div style='font-size:2.0em;font-weight:800;color:#FFD700;padding-bottom:10px;text-align:center;'>🔥 RKO - Enhanced Renko Scanner 🔥</div>", unsafe_allow_html=True)
     st.markdown("<div style='text-align:center;font-size:1.2em;color:#37F553;font-weight:700;padding:4px;'>✅ S/R Detection | ✅ Volume Analysis | ✅ OBV Divergence | ✅ MTF Alignment</div>", unsafe_allow_html=True)
