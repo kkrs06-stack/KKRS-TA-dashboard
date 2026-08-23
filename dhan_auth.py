@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import stat
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -38,6 +39,7 @@ logger = logging.getLogger("dhan_auth")
 AUTH_BASE_URL = "https://auth.dhan.co"
 API_BASE_URL = "https://api.dhan.co/v2"
 REQUEST_TIMEOUT_SECONDS = 15
+TOTP_INTERVAL_SECONDS = 30  # standard TOTP code lifetime; pyotp's default
 
 # Dhan's response has been observed under both of these key styles in
 # different doc snapshots. We check both rather than assuming one, and log
@@ -100,23 +102,35 @@ class DhanTokenManager:
         self.max_retries = max_retries
         self.retry_backoff_seconds = retry_backoff_seconds
 
+        # Guards every read/write of self._token. Without this, concurrent
+        # callers (e.g. multiple worker threads in a batch fetch) that all
+        # see a stale token at the same moment will each independently try
+        # to renew/regenerate at once -- racing each other against Dhan's
+        # auth endpoint and producing malformed/rejected responses.
+        self._lock = threading.Lock()
         self._token: Optional[DhanToken] = self._load_cache()
 
     # -- public API ---------------------------------------------------
 
     def get_access_token(self, force_refresh: bool = False) -> str:
-        """Return a valid access token, refreshing/regenerating as needed."""
-        if not force_refresh and self._token and self._token.is_valid():
-            if self._token.needs_renewal():
-                self._try_renew()
-            return self._token.access_token
-
-        if self._token and not force_refresh:
-            if self._try_renew():
+        """
+        Return a valid access token, refreshing/regenerating as needed.
+        Thread-safe: only one caller at a time actually performs a
+        renew/regenerate network call. Others block briefly and then reuse
+        whatever that call produced, instead of racing their own attempts.
+        """
+        with self._lock:
+            if not force_refresh and self._token and self._token.is_valid():
+                if self._token.needs_renewal():
+                    self._try_renew()
                 return self._token.access_token
 
-        self._regenerate()
-        return self._token.access_token
+            if self._token and not force_refresh:
+                if self._try_renew():
+                    return self._token.access_token
+
+            self._regenerate()
+            return self._token.access_token
 
     # -- internals ------------------------------------------------------
 
@@ -155,10 +169,38 @@ class DhanTokenManager:
             return False
 
     def _regenerate(self) -> None:
+        """
+        Retries here are TOTP-window-aware, not just a short generic
+        backoff: a TOTP code is only valid for a fixed ~30s window, so a
+        retry that fires quickly reuses the SAME code Dhan may have just
+        rejected as a replay. Each retry waits until a genuinely fresh
+        code is guaranteed before trying again, rather than hammering the
+        auth endpoint with what looks like the same submission repeated.
+        """
         logger.info("Generating a new Dhan access token via PIN + TOTP.")
-        response = self._with_retries("generateAccessToken", self._call_generate_access_token)
-        self._apply_response(response)
-        logger.info("New token generated. Expiry: %s", self._token.expires_at)
+        last_exc = None
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                response = self._call_generate_access_token()
+                self._apply_response(response)
+                logger.info("New token generated. Expiry: %s", self._token.expires_at)
+                return
+            except Exception as exc:
+                last_exc = exc
+                logger.warning(
+                    "generateAccessToken failed (attempt %d/%d): %s",
+                    attempt, self.max_retries, exc,
+                )
+                if attempt < self.max_retries:
+                    wait_seconds = self._seconds_until_fresh_totp()
+                    logger.info("Waiting %.1fs for a fresh TOTP code before retrying.", wait_seconds)
+                    time.sleep(wait_seconds)
+        raise RuntimeError(f"generateAccessToken failed after {self.max_retries} attempts") from last_exc
+
+    @staticmethod
+    def _seconds_until_fresh_totp(buffer: float = 1.0) -> float:
+        elapsed_in_window = time.time() % TOTP_INTERVAL_SECONDS
+        return (TOTP_INTERVAL_SECONDS - elapsed_in_window) + buffer
 
     def _call_generate_access_token(self) -> dict:
         # Documented as a POST with dhanClientId/pin/totp passed as query
@@ -193,14 +235,15 @@ class DhanTokenManager:
         return response.json()
 
     def _apply_response(self, response: dict) -> None:
-        logger.debug("Auth response keys: %s", list(response.keys()))
+        logger.debug("Auth response: %s", response)
 
         token = next((response[k] for k in _TOKEN_KEYS if k in response), None)
         if not token:
             raise RuntimeError(
-                f"Could not find access token in Dhan response (keys seen: {list(response.keys())}). "
-                "Dhan may have changed their response format — check DHAN_LOG_LEVEL=DEBUG output "
-                "and update _TOKEN_KEYS/_EXPIRY_KEYS in dhan_auth.py accordingly."
+                f"Could not find access token in Dhan response: {response}. "
+                "If this shows a real error message/status from Dhan (not just unfamiliar "
+                "key names), that's the actual reason auth failed -- check its content "
+                "rather than assuming the response format changed."
             )
 
         expiry_raw = next((response[k] for k in _EXPIRY_KEYS if k in response), None)
