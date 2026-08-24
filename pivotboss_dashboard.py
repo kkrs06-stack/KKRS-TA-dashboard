@@ -1045,7 +1045,7 @@ def run_pivotboss_tab():
         "ST Multiplier", min_value=1.0, max_value=5.0, value=3.0, step=0.1
     )
 
-    max_symbols = st.sidebar.slider("Max symbols to scan", 10, 200, 50, 10)
+    max_symbols = st.sidebar.slider("Max symbols to scan", 10, 250, 50, 10)
 
     if st.button("🔄 Refresh Data Cache"):
         fetch_all_ohlcv.clear()
