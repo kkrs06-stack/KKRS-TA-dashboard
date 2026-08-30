@@ -194,8 +194,7 @@ def _render_tiles(occurrences: list[dict], side: str):
                 for field in DASHBOARD_FIELDS
             )
 
-            #tviewurl = f"https://www.tradingview.com/chart/?symbol=NSE%3A{occ['Symbol']}"
-            tviewurl = f"https://www.tradingview.com/chart/HHXUPRWL/?symbol=NSE%3A{occ['Symbol']}"
+            tviewurl = f"https://www.tradingview.com/chart/?symbol=NSE%3A{occ['Symbol']}"
 
             card_html = f"""
             <div style="background:#252525;border-radius:14px;width:380px;min-height:420px;position:relative;
@@ -261,6 +260,7 @@ def run_cpr_pro_tab():
     if st.button(" Refresh Data Cache"):
         fetch_ohlcv_for_cpr.clear()
         batch_scan_cpr.clear()
+        st.session_state.pop("cpr_pro_results", None)
 
     fo_df = process_fo_stock_list()
     if fo_df.empty:
@@ -271,27 +271,34 @@ def run_cpr_pro_tab():
     data_dict = fetch_ohlcv_for_cpr(ticker_list, chart_tf)
 
     run = st.button("Run CPR PRO Scan")
-    if not run:
+    if run:
+        config = {
+            **DEFAULT_CONFIG,
+            "cpr_tf": cpr_tf,
+            "mtf_tf": mtf_tf,
+            "mtfMode": mtf_mode,
+            "cprWidthLookback": cpr_width_lookback,
+            "narrowCPRThreshold": narrow_thresh,
+            "wideCPRThreshold": wide_thresh,
+            "veryWideCPRThreshold": very_wide_thresh,
+            "trendEMALength": trend_ema_len,
+            "minimumSignalScore": min_score,
+            "aPlusScoreThreshold": aplus_score,
+            "volumeMultiplier": vol_mult,
+            "blockSignalsInChop": block_chop,
+            "chopScoreThreshold": chop_thresh,
+        }
+        st.session_state["cpr_pro_results"] = batch_scan_cpr(data_dict, fo_df, config)
+
+    # Persisted across tab switches -- see exhaustion_dashboard.py's
+    # run_exhaustion_tab() for why this is needed (Streamlit reruns the
+    # whole script on every tab switch, and st.button() is only True on
+    # the exact rerun it was clicked).
+    results = st.session_state.get("cpr_pro_results")
+    if results is None:
+        st.info("Click 'Run CPR PRO Scan' to scan for signals.")
         return
-
-    config = {
-        **DEFAULT_CONFIG,
-        "cpr_tf": cpr_tf,
-        "mtf_tf": mtf_tf,
-        "mtfMode": mtf_mode,
-        "cprWidthLookback": cpr_width_lookback,
-        "narrowCPRThreshold": narrow_thresh,
-        "wideCPRThreshold": wide_thresh,
-        "veryWideCPRThreshold": very_wide_thresh,
-        "trendEMALength": trend_ema_len,
-        "minimumSignalScore": min_score,
-        "aPlusScoreThreshold": aplus_score,
-        "volumeMultiplier": vol_mult,
-        "blockSignalsInChop": block_chop,
-        "chopScoreThreshold": chop_thresh,
-    }
-
-    buys, sells = batch_scan_cpr(data_dict, fo_df, config)
+    buys, sells = results
 
     total = len(buys) + len(sells)
     col1, col2, col3 = st.columns(3)
