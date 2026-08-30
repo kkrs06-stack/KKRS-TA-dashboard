@@ -60,7 +60,7 @@ def _resample(df: pd.DataFrame, rule: str) -> pd.DataFrame:
     return df.resample(rule).agg(agg).dropna()
 
 
-@st.cache_data(show_spinner="Downloading Ichimoku scan data (Dhan)...")
+@st.cache_data(show_spinner="Downloading Ichimoku scan data (Dhan)...", ttl=3600)
 def fetch_ohlcv_for_ichimoku(ticker_list: list[str], chart_tf: str) -> dict[str, pd.DataFrame]:
     plain_symbols = [t.replace(".NS", "") for t in ticker_list]
     ticker_by_plain = dict(zip(plain_symbols, ticker_list))
@@ -174,7 +174,7 @@ def _process_single_symbol(args):
     return _latest_bar_signals(symbol, df, config, lot, name)
 
 
-@st.cache_data(show_spinner="Scanning for Ichimoku signals...")
+@st.cache_data(show_spinner="Scanning for Ichimoku signals...", ttl=3600)
 def batch_scan_ichimoku(data_dict: dict, fo_df: pd.DataFrame, config: dict) -> tuple[list[dict], list[dict]]:
     args_list = []
     for _, row in fo_df.iterrows():
@@ -221,7 +221,7 @@ def _render_tiles(occurrences: list[dict], side: str):
             cloud_color = "#37F553" if occ["FutureCloud"] == "Green" else "#FF3A3A"
 
             tviewurl = f"https://www.tradingview.com/chart/WGKkLmP8/?symbol=NSE%3A{occ['Symbol']}"
-           
+
             card_html = f"""
             <div style="background:#252525;border-radius:14px;width:380px;min-height:380px;position:relative;
                         box-shadow:1px 2px 8px #111;margin-bottom:15px;border:1px solid #333;overflow:hidden;padding-bottom:10px">
@@ -280,11 +280,12 @@ def run_ichimoku_tab():
         senkou_b_period = st.number_input("Senkou B Period", 20, 120, DEFAULT_CONFIG["senkou_b_period"])
         displacement = st.number_input("Displacement", 10, 60, DEFAULT_CONFIG["displacement"])
 
-    max_symbols = st.sidebar.slider("Max symbols to scan", 10, 250, 50, 10)
+    max_symbols = st.sidebar.slider("Max symbols to scan", 10, 250, 250, 10)
 
     if st.button(" Refresh Data Cache"):
         fetch_ohlcv_for_ichimoku.clear()
         batch_scan_ichimoku.clear()
+        st.session_state.pop("ichimoku_results", None)
 
     fo_df = process_fo_stock_list()
     if fo_df.empty:
@@ -295,19 +296,26 @@ def run_ichimoku_tab():
     data_dict = fetch_ohlcv_for_ichimoku(ticker_list, chart_tf)
 
     run = st.button("Run Ichimoku Scan")
-    if not run:
+    if run:
+        config = {
+            **DEFAULT_CONFIG,
+            "lagging_compare_mode": lagging_mode,
+            "tenkan_period": tenkan_period,
+            "kijun_period": kijun_period,
+            "senkou_b_period": senkou_b_period,
+            "displacement": displacement,
+        }
+        st.session_state["ichimoku_results"] = batch_scan_ichimoku(data_dict, fo_df, config)
+
+    # Persisted across tab switches -- see exhaustion_dashboard.py's
+    # run_exhaustion_tab() for why this is needed (Streamlit reruns the
+    # whole script on every tab switch, and st.button() is only True on
+    # the exact rerun it was clicked).
+    results = st.session_state.get("ichimoku_results")
+    if results is None:
+        st.info("Click 'Run Ichimoku Scan' to scan for signals.")
         return
-
-    config = {
-        **DEFAULT_CONFIG,
-        "lagging_compare_mode": lagging_mode,
-        "tenkan_period": tenkan_period,
-        "kijun_period": kijun_period,
-        "senkou_b_period": senkou_b_period,
-        "displacement": displacement,
-    }
-
-    longs, shorts = batch_scan_ichimoku(data_dict, fo_df, config)
+    longs, shorts = results
 
     total = len(longs) + len(shorts)
     col1, col2, col3 = st.columns(3)
