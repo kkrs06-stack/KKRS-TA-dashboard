@@ -18,7 +18,7 @@ from ss_strat_dashboard import ss_strat_dashboard, get_ssstrat_stock_data_optimi
 from ichi import ichi_dashboard
 from confluence_dashboard import confluence_scanner_dashboard
 #from pivotboss_dashboard import run_pivotboss_tab as pivotboss_dashboard
-from pivotboss_dashboard import run_pivotboss_tab as pivotboss_dashboard
+from pivotboss_dashboard_dhan import run_pivotboss_tab as pivotboss_dashboard
 from cpr_pro_dashboard import run_cpr_pro_tab as cpr_pro_dashboard
 from ichimoku_dashboard import run_ichimoku_tab as ichimoku_dashboard
 from exhaustion_dashboard import run_exhaustion_tab as exhaustion_dashboard
