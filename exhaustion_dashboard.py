@@ -218,17 +218,17 @@ def _render_tiles(candidates: list[dict], side: str):
             strike_lines = []
             if strike_info:
                 strike_lines.append(
-                    f'<div style="width:100%;text-align:center;font-size:1.2em;color:#FFD700;font-weight:700;margin-bottom:3px">{strike_info["wall_label"]} at ₹{strike_info["strike"]:.1f} ({cand["side"]})</div>'
+                    f'<div style="width:100%;text-align:center;font-size:1.05em;color:#FFD700;font-weight:700;margin-bottom:3px">{strike_info["wall_label"]} at ₹{strike_info["strike"]:.1f} ({cand["side"]})</div>'
                 )
                 strike_lines.append(
-                    f'<div style="width:100%;text-align:center;font-size:1.2em;color:#ECECEC;margin-bottom:2px">OI: {strike_info["oi"]:,} ({strike_info["oi_trend"]}) &nbsp; {strike_info["pct_away_from_spot"]:+.1f}% OTM</div>'
+                    f'<div style="width:100%;text-align:center;font-size:0.92em;color:#ECECEC;margin-bottom:2px">OI: {strike_info["oi"]:,} ({strike_info["oi_trend"]}) &nbsp; {strike_info["pct_away_from_spot"]:+.1f}% OTM</div>'
                 )
                 strike_lines.append(
-                    f'<div style="width:100%;text-align:center;font-size:1.2em;color:#ECECEC;margin-bottom:2px">Delta: {strike_info["delta"]:.2f} &nbsp; IV: {strike_info["implied_volatility"]:.1f}% &nbsp; Premium: ₹{strike_info["last_price"]}</div>'
+                    f'<div style="width:100%;text-align:center;font-size:0.92em;color:#ECECEC;margin-bottom:2px">Delta: {strike_info["delta"]:.2f} &nbsp; IV: {strike_info["implied_volatility"]:.1f}% &nbsp; Premium: ₹{strike_info["last_price"]}</div>'
                 )
                 if strike_info.get("delta_flag"):
                     strike_lines.append(
-                        f'<div style="width:100%;text-align:center;font-size:1.2em;color:#FF3A3A;margin-bottom:2px"> {strike_info["delta_flag"]}</div>'
+                        f'<div style="width:100%;text-align:center;font-size:0.88em;color:#FF3A3A;margin-bottom:2px"> {strike_info["delta_flag"]}</div>'
                     )
             else:
                 strike_lines.append(
@@ -241,9 +241,9 @@ def _render_tiles(candidates: list[dict], side: str):
                 f'<div style="width:100%;text-align:center;padding:6px 90px 0 90px;box-sizing:border-box"><span style="color:#fff;font-size:1.15em;font-weight:700">{cand["name"]}</span></div>',
                 f'<div style="position:absolute;left:14px;top:6px;font-size:0.8em;background:{sig_bg};color:#fff;padding:2px 9px;border-radius:10px;font-weight:700">{side_label}</div>',
                 f'<div style="position:absolute;right:16px;top:6px;font-size:0.92em;color:#ECECEC">Lot <span style="font-weight:bold">{cand["lot"]}</span></div>',
-                f'<div style="width:100%;text-align:center;margin-top:22px;margin-bottom:2px"><span style="font-size:1.2em;color:#37F553;font-weight:700">₹{cand["price"]}</span> <span style="font-size:1.2em;color:#FFD700;margin-left:8px">{cand["pct_change"]:+.1f}% / {DEFAULT_CONFIG["lookback_sessions"]}d</span></div>',
-                f'<div style="width:100%;text-align:center;font-size:1.2em;color:#ECECEC;margin-bottom:2px">RSI {cand["rsi"]} &nbsp; Stretch(9): {cand["stretch_short"]:+.1f}% &nbsp; Stretch(20): {cand["stretch_long"]:+.1f}%</div>',
-                f'<div style="width:100%;text-align:center;font-size:1.2em;color:{signal_color};margin-bottom:5px">{signal_text}</div>',
+                f'<div style="width:100%;text-align:center;margin-top:22px;margin-bottom:2px"><span style="font-size:1.2em;color:#37F553;font-weight:700">₹{cand["price"]}</span> <span style="font-size:0.92em;color:#FFD700;margin-left:8px">{cand["pct_change"]:+.1f}% / {DEFAULT_CONFIG["lookback_sessions"]}d</span></div>',
+                f'<div style="width:100%;text-align:center;font-size:0.92em;color:#ECECEC;margin-bottom:2px">RSI {cand["rsi"]} &nbsp; Stretch(9): {cand["stretch_short"]:+.1f}% &nbsp; Stretch(20): {cand["stretch_long"]:+.1f}%</div>',
+                f'<div style="width:100%;text-align:center;font-size:0.88em;color:{signal_color};margin-bottom:5px">{signal_text}</div>',
                 '<div style="width:90%;border-top:1px solid #444;margin:5px auto"></div>',
                 strike_html,
                 '</div>',
@@ -306,11 +306,12 @@ def run_exhaustion_tab():
     otm_min = st.sidebar.number_input("OTM Band Min %", 1.0, 15.0, DEFAULT_OTM_MIN_PCT, 0.5)
     otm_max = st.sidebar.number_input("OTM Band Max %", 2.0, 25.0, DEFAULT_OTM_MAX_PCT, 0.5)
 
-    max_symbols = st.sidebar.slider("Max symbols to scan (Stage 1)", 10, 250, 50, 10)
+    max_symbols = st.sidebar.slider("Max symbols to scan (Stage 1)", 10, 250, 250, 10)
 
     if st.button(" Refresh Data Cache"):
         fetch_ohlcv_for_exhaustion.clear()
         batch_scan_stage1.clear()
+        st.session_state.pop("exhaustion_results", None)
 
     fo_df = process_fo_stock_list()
     if fo_df.empty:
@@ -321,33 +322,44 @@ def run_exhaustion_tab():
     data_dict = fetch_ohlcv_for_exhaustion(ticker_list)
 
     run = st.button("Run Exhaustion Scan")
-    if not run:
+    if run:
+        config = {
+            **DEFAULT_CONFIG,
+            "lookback_sessions": lookback,
+            "min_move_pct": min_move,
+            "stretch_short_pct": stretch_short,
+            "stretch_long_pct": stretch_long,
+            "rsi_overbought": rsi_overbought,
+            "rsi_oversold": rsi_oversold,
+            "weak_close_threshold": weak_close_threshold,
+            "acceleration_tolerance": acceleration_tolerance,
+            "require_stretch_short": require_stretch_short,
+            "require_acceleration": require_acceleration,
+            "signal_lookback_bars": signal_lookback_bars,
+        }
+
+        candidates = batch_scan_stage1(data_dict, fo_df, config)
+
+        if candidates:
+            st.info(f"Stage 1 found {len(candidates)} candidate(s). Fetching option chains (rate-limited to ~3s each)...")
+            with st.spinner(f"Fetching option chains for {len(candidates)} candidate(s)..."):
+                candidates = run_stage2(candidates, otm_min, otm_max)
+
+        st.session_state["exhaustion_results"] = candidates
+
+    # Persisted across tab switches -- Streamlit reruns the whole script on
+    # every interaction (including changing which strategy tab is selected
+    # in the sidebar), and a button's "clicked" state is only True on the
+    # exact rerun it was clicked. Without storing the result in
+    # session_state, navigating away and back would silently drop the
+    # tiles until "Run Exhaustion Scan" was clicked again.
+    candidates = st.session_state.get("exhaustion_results")
+    if candidates is None:
+        st.info("Click 'Run Exhaustion Scan' to scan for candidates.")
         return
-
-    config = {
-        **DEFAULT_CONFIG,
-        "lookback_sessions": lookback,
-        "min_move_pct": min_move,
-        "stretch_short_pct": stretch_short,
-        "stretch_long_pct": stretch_long,
-        "rsi_overbought": rsi_overbought,
-        "rsi_oversold": rsi_oversold,
-        "weak_close_threshold": weak_close_threshold,
-        "acceleration_tolerance": acceleration_tolerance,
-        "require_stretch_short": require_stretch_short,
-        "require_acceleration": require_acceleration,
-        "signal_lookback_bars": signal_lookback_bars,
-    }
-
-    candidates = batch_scan_stage1(data_dict, fo_df, config)
-
     if not candidates:
         st.info("No parabolic exhaustion candidates found on the latest trading day.")
         return
-
-    st.info(f"Stage 1 found {len(candidates)} candidate(s). Fetching option chains (rate-limited to ~3s each)...")
-    with st.spinner(f"Fetching option chains for {len(candidates)} candidate(s)..."):
-        candidates = run_stage2(candidates, otm_min, otm_max)
 
     call_candidates = sorted([c for c in candidates if c["side"] == "CALL"], key=lambda c: c["time"], reverse=True)
     put_candidates = sorted([c for c in candidates if c["side"] == "PUT"], key=lambda c: c["time"], reverse=True)
