@@ -117,6 +117,7 @@ def _stage1_check(symbol: str, df: pd.DataFrame, config: dict, lot, name) -> lis
             "bars_ago": int(bars_ago),
             "side": side,
             "price": round(float(row["Close"]), 2),
+            "prev_close": round(float(signals["Close"].iloc[-1]), 2),
             "pct_change": round(float(row["PctChangeFull"]), 2),
             "rsi": round(float(row["RSI"]), 2),
             "stretch_short": round(float(row["StretchShortPct"]), 2),
@@ -181,6 +182,12 @@ def run_stage2(candidates: list[dict], otm_min_pct: float, otm_max_pct: float) -
             chain = _market.get_option_chain(security_id, nearest_expiry)
             chain_data = chain.get("data", {})
 
+            # cand["price"] is the Close on the day the signal fired (could be
+            # several sessions back within the lookback window) -- this is the
+            # live spot from today's option chain, shown separately so the
+            # tile never implies the signal-day price is current.
+            cand["current_price"] = chain_data.get("last_price")
+
             strike_info = select_otm_strike(chain_data, cand["side"], otm_min_pct, otm_max_pct)
             cand["expiry"] = nearest_expiry
             cand["strike_info"] = strike_info
@@ -213,37 +220,55 @@ def _render_tiles(candidates: list[dict], side: str):
                 if cand.get("bars_ago", 0) == 0
                 else f"Signal: {cand['bars_ago']} session(s) ago ({cand['time'].strftime('%d-%b')})"
             )
+            current_price = cand.get("current_price")
+            if current_price and cand.get("bars_ago", 0) > 0:
+                # Only worth showing separately when the signal wasn't today --
+                # on a same-day signal, price and current_price are the same.
+                # Colored vs. the last completed session's close (the normal
+                # "is it up or down" reference), not the signal-day price --
+                # the signal could be several sessions old, so comparing
+                # against it wouldn't mean "up/down today."
+                reference_close = cand.get("prev_close", cand["price"])
+                if current_price > reference_close:
+                    now_color = "#37F553"
+                elif current_price < reference_close:
+                    now_color = "#FF3A3A"
+                else:
+                    now_color = "#ECECEC"
+                signal_text += f' &nbsp;·&nbsp; <span style="color:{now_color}">Now: ₹{current_price:.2f}</span>'
 
             strike_info = cand.get("strike_info")
             strike_lines = []
             if strike_info:
                 strike_lines.append(
-                    f'<div style="width:100%;text-align:center;font-size:1.05em;color:#FFD700;font-weight:700;margin-bottom:3px">{strike_info["wall_label"]} at ₹{strike_info["strike"]:.1f} ({cand["side"]})</div>'
+                    f'<div style="width:100%;text-align:center;font-size:1.19em;color:#FFD700;font-weight:700;margin-bottom:3px">{strike_info["wall_label"]} at ₹{strike_info["strike"]:.1f} ({cand["side"]})</div>'
                 )
                 strike_lines.append(
-                    f'<div style="width:100%;text-align:center;font-size:0.92em;color:#ECECEC;margin-bottom:2px">OI: {strike_info["oi"]:,} ({strike_info["oi_trend"]}) &nbsp; {strike_info["pct_away_from_spot"]:+.1f}% OTM</div>'
+                    f'<div style="width:100%;text-align:center;font-size:1.19em;color:#ECECEC;margin-bottom:2px">OI: {strike_info["oi"]:,} ({strike_info["oi_trend"]}) &nbsp; {strike_info["pct_away_from_spot"]:+.1f}% OTM</div>'
                 )
                 strike_lines.append(
-                    f'<div style="width:100%;text-align:center;font-size:0.92em;color:#ECECEC;margin-bottom:2px">Delta: {strike_info["delta"]:.2f} &nbsp; IV: {strike_info["implied_volatility"]:.1f}% &nbsp; Premium: ₹{strike_info["last_price"]}</div>'
+                    f'<div style="width:100%;text-align:center;font-size:1.19em;color:#ECECEC;margin-bottom:2px">Delta: {strike_info["delta"]:.2f} &nbsp; IV: {strike_info["implied_volatility"]:.1f}% &nbsp; Premium: ₹{strike_info["last_price"]}</div>'
                 )
                 if strike_info.get("delta_flag"):
                     strike_lines.append(
-                        f'<div style="width:100%;text-align:center;font-size:0.88em;color:#FF3A3A;margin-bottom:2px"> {strike_info["delta_flag"]}</div>'
+                        f'<div style="width:100%;text-align:center;font-size:1.19em;color:#FF3A3A;margin-bottom:2px"> {strike_info["delta_flag"]}</div>'
                     )
             else:
                 strike_lines.append(
-                    f'<div style="width:100%;text-align:center;font-size:0.92em;color:#FF3A3A">{cand.get("strike_error", "Strike data unavailable")}</div>'
+                    f'<div style="width:100%;text-align:center;font-size:1.19em;color:#FF3A3A">{cand.get("strike_error", "Strike data unavailable")}</div>'
                 )
             strike_html = "".join(strike_lines)
 
+            tviewurl = f"https://www.tradingview.com/chart/RaPnty9s/?symbol=NSE%3A{cand['symbol']}"
+
             card_lines = [
                 '<div style="background:#252525;border-radius:14px;width:380px;min-height:380px;position:relative;box-shadow:1px 2px 8px #111;margin-bottom:15px;border:1px solid #333;overflow:hidden;padding-bottom:8px">',
-                f'<div style="width:100%;text-align:center;padding:6px 90px 0 90px;box-sizing:border-box"><span style="color:#fff;font-size:1.15em;font-weight:700">{cand["name"]}</span></div>',
-                f'<div style="position:absolute;left:14px;top:6px;font-size:0.8em;background:{sig_bg};color:#fff;padding:2px 9px;border-radius:10px;font-weight:700">{side_label}</div>',
-                f'<div style="position:absolute;right:16px;top:6px;font-size:0.92em;color:#ECECEC">Lot <span style="font-weight:bold">{cand["lot"]}</span></div>',
-                f'<div style="width:100%;text-align:center;margin-top:22px;margin-bottom:2px"><span style="font-size:1.2em;color:#37F553;font-weight:700">₹{cand["price"]}</span> <span style="font-size:0.92em;color:#FFD700;margin-left:8px">{cand["pct_change"]:+.1f}% / {DEFAULT_CONFIG["lookback_sessions"]}d</span></div>',
-                f'<div style="width:100%;text-align:center;font-size:0.92em;color:#ECECEC;margin-bottom:2px">RSI {cand["rsi"]} &nbsp; Stretch(9): {cand["stretch_short"]:+.1f}% &nbsp; Stretch(20): {cand["stretch_long"]:+.1f}%</div>',
-                f'<div style="width:100%;text-align:center;font-size:0.88em;color:{signal_color};margin-bottom:5px">{signal_text}</div>',
+                f'<div style="width:100%;text-align:center;padding:6px 90px 0 90px;box-sizing:border-box"><a href="{tviewurl}" target="_blank" style="color:#fff;font-size:1.19em;font-weight:700;text-decoration:none">{cand["name"]}</a></div>',
+                f'<div style="position:absolute;left:14px;top:6px;font-size:1.19em;background:{sig_bg};color:#fff;padding:2px 9px;border-radius:10px;font-weight:700">{side_label}</div>',
+                f'<div style="position:absolute;right:16px;top:6px;font-size:1.19em;color:#ECECEC">Lot <span style="font-weight:bold">{cand["lot"]}</span></div>',
+                f'<div style="width:100%;text-align:center;margin-top:22px;margin-bottom:2px"><span style="font-size:1.19em;color:#37F553;font-weight:700">₹{cand["price"]}</span><span style="font-size:1.19em;color:#999;margin-left:4px">(at signal)</span> <span style="font-size:1.19em;color:#FFD700;margin-left:8px">{cand["pct_change"]:+.1f}% / {DEFAULT_CONFIG["lookback_sessions"]}d</span></div>',
+                f'<div style="width:100%;text-align:center;font-size:1.19em;color:#ECECEC;margin-bottom:2px">RSI {cand["rsi"]} &nbsp; Stretch(9): {cand["stretch_short"]:+.1f}% &nbsp; Stretch(20): {cand["stretch_long"]:+.1f}%</div>',
+                f'<div style="width:100%;text-align:center;font-size:1.19em;color:{signal_color};margin-bottom:5px">{signal_text}</div>',
                 '<div style="width:90%;border-top:1px solid #444;margin:5px auto"></div>',
                 strike_html,
                 '</div>',
