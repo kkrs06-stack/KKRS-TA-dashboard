@@ -40,6 +40,7 @@ _SEGMENT_COL_CANDIDATES = ("SEGMENT",)
 _INSTRUMENT_COL_CANDIDATES = ("INSTRUMENT_NAME", "INSTRUMENT")
 
 NSE_EQ_EXCHANGE_SEGMENT = "NSE_EQ"
+BSE_EQ_EXCHANGE_SEGMENT = "BSE_EQ"
 
 
 def _find_column(columns, candidates) -> Optional[str]:
@@ -55,6 +56,7 @@ class DhanInstrumentLookup:
         self.cache_path = Path(cache_path)
         self.cache_ttl_seconds = cache_ttl_hours * 3600
         self._symbol_to_security_id: dict[str, str] = {}
+        self._bse_symbol_to_security_id: dict[str, str] = {}
         self._load()
 
     def resolve(self, symbol: str) -> str:
@@ -68,6 +70,23 @@ class DhanInstrumentLookup:
                 "Check the exact trading symbol matches Dhan's instrument master "
                 "(e.g. 'M&M' vs 'M_M', no '.NS' suffix like yfinance uses)."
             ) from None
+
+    def resolve_with_exchange(self, symbol: str) -> tuple[str, str]:
+        """
+        Resolve a symbol on NSE first, falling back to BSE if it has no NSE
+        equity listing at all (some smaller-cap/less liquid stocks are
+        BSE-only -- confirmed for at least one real portfolio holding).
+        Returns (security_id, exchange_segment) so callers know which
+        exchangeSegment value to use for the historical/quote APIs.
+        """
+        key = symbol.strip().upper()
+        if key in self._symbol_to_security_id:
+            return self._symbol_to_security_id[key], NSE_EQ_EXCHANGE_SEGMENT
+        if key in self._bse_symbol_to_security_id:
+            return self._bse_symbol_to_security_id[key], BSE_EQ_EXCHANGE_SEGMENT
+        raise KeyError(
+            f"No Dhan security_id found for symbol '{symbol}' on NSE or BSE."
+        )
 
     def resolve_many(self, symbols: list[str]) -> dict[str, str]:
         resolved, missing = {}, []
@@ -122,6 +141,18 @@ class DhanInstrumentLookup:
                 self._symbol_to_security_id[symbol] = security_id
 
         logger.info("Loaded %d NSE equity symbol mappings from Dhan instrument master.", len(self._symbol_to_security_id))
+
+        bse_equity = df[
+            (df[exch_col].astype(str).str.upper() == "BSE")
+            & (df[segment_col].astype(str).str.upper() == "E")
+        ]
+        for _, row in bse_equity.iterrows():
+            symbol = str(row[symbol_col]).strip().upper()
+            security_id = str(row[security_id_col]).strip()
+            if symbol and security_id and security_id != "nan":
+                self._bse_symbol_to_security_id[symbol] = security_id
+
+        logger.info("Loaded %d BSE equity symbol mappings from Dhan instrument master.", len(self._bse_symbol_to_security_id))
 
     def _get_scrip_master(self) -> pd.DataFrame:
         if self._is_cache_fresh():
