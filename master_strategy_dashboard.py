@@ -22,6 +22,7 @@ from pivotboss_dashboard_dhan import run_pivotboss_tab as pivotboss_dashboard
 from cpr_pro_dashboard import run_cpr_pro_tab as cpr_pro_dashboard
 from ichimoku_dashboard import run_ichimoku_tab as ichimoku_dashboard
 from exhaustion_dashboard import run_exhaustion_tab as exhaustion_dashboard
+from portfolio_dashboard import run_portfolio_tab as portfolio_dashboard
 
 warnings.filterwarnings("ignore")
 
@@ -88,6 +89,7 @@ st.set_page_config(layout="wide", page_title="Kamlesh TA Strategies", page_icon=
 today_str = datetime.datetime.now().strftime("%d-%b-%Y")
 STRATEGIES = [
     #{"label": "RSI Strategy", "id": "rsi"},
+    {"label": "Portfolio", "id": "portfolio"},
     {"label": "SS Strat", "id": "ssstrat"},
     {"label": "Daily > Weekly", "id": "dailyweekly"},
     {"label": "Just above/below", "id": "reversal"},
@@ -825,7 +827,13 @@ def clear_all_app_cache():
         batch_scan_stage1.clear()
     except Exception:
         pass
-
+    try:
+        from portfolio_dashboard import fetch_market_data, fetch_nifty_history
+        fetch_market_data.clear()
+        fetch_nifty_history.clear()
+    except Exception:
+        pass
+        
 if "cache_cleared_initial" not in st.session_state:
     clear_all_app_cache()
     st.session_state["cache_cleared_initial"] = True
@@ -949,6 +957,8 @@ elif selected == "ichimoku":
     ichimoku_dashboard()    
 elif selected == "exhaustion":
     exhaustion_dashboard()
+elif selected == "portfolio":
+    portfolio_dashboard()    
 elif selected == "rko":
     st.markdown("<div style='font-size:2.0em;font-weight:800;color:#FFD700;padding-bottom:10px;text-align:center;'>🔥 RKO - Enhanced Renko Scanner 🔥</div>", unsafe_allow_html=True)
     st.markdown("<div style='text-align:center;font-size:1.2em;color:#37F553;font-weight:700;padding:4px;'>✅ S/R Detection | ✅ Volume Analysis | ✅ OBV Divergence | ✅ MTF Alignment</div>", unsafe_allow_html=True)
