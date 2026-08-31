@@ -91,6 +91,13 @@ DEFAULT_FNO_EXCHANGE_SEGMENT = "NSE_FNO"
 
 
 class DhanMarketData:
+    # Dhan error codes meaning the access token itself was rejected server-side
+    # (not a rate limit, not a data issue) -- e.g. a second script/process
+    # regenerated a token for the same client, silently invalidating this
+    # process's in-memory one. Worth a forced token refresh + one retry
+    # rather than failing every symbol in a batch identically.
+    _AUTH_ERROR_CODES = {"DH-906", "DH-901"}
+
     def __init__(
         self,
         token_manager: Optional[DhanTokenManager] = None,
@@ -112,15 +119,25 @@ class DhanMarketData:
         )
         return self._extract_ltp(response, id_to_symbol)
 
-    def get_historical_daily(self, symbol: str, from_date: date, to_date: date) -> pd.DataFrame:
-        """OHLCV daily candles for one symbol, as a DataFrame indexed by date."""
-        security_id = self._instruments.resolve(symbol)
+    def get_historical_daily(
+        self, symbol: str, from_date: date, to_date: date,
+        security_id: Optional[str] = None, exchange_segment: str = NSE_EQ_EXCHANGE_SEGMENT,
+    ) -> pd.DataFrame:
+        """
+        OHLCV daily candles for one symbol, as a DataFrame indexed by date.
+        Defaults to resolving `symbol` on NSE, same as always. Pass an
+        explicit `security_id`/`exchange_segment` (e.g. from
+        DhanInstrumentLookup.resolve_with_exchange()) for a BSE-only stock
+        that has no NSE equity listing at all.
+        """
+        if security_id is None:
+            security_id = self._instruments.resolve(symbol)
 
         response = self._post(
             "/charts/historical",
             {
                 "securityId": security_id,
-                "exchangeSegment": NSE_EQ_EXCHANGE_SEGMENT,
+                "exchangeSegment": exchange_segment,
                 "instrument": INSTRUMENT_TYPE_EQUITY,
                 "fromDate": from_date.isoformat(),
                 "toDate": to_date.isoformat(),
@@ -129,16 +146,18 @@ class DhanMarketData:
         return self._candles_to_dataframe(response)
 
     def get_historical_intraday(
-        self, symbol: str, from_dt: datetime, to_dt: datetime, interval_minutes: int = 5
+        self, symbol: str, from_dt: datetime, to_dt: datetime, interval_minutes: int = 5,
+        security_id: Optional[str] = None, exchange_segment: str = NSE_EQ_EXCHANGE_SEGMENT,
     ) -> pd.DataFrame:
         """OHLCV intraday candles. Dhan limits this to 90 days per request."""
-        security_id = self._instruments.resolve(symbol)
+        if security_id is None:
+            security_id = self._instruments.resolve(symbol)
 
         response = self._post(
             "/charts/intraday",
             {
                 "securityId": security_id,
-                "exchangeSegment": NSE_EQ_EXCHANGE_SEGMENT,
+                "exchangeSegment": exchange_segment,
                 "instrument": INSTRUMENT_TYPE_EQUITY,
                 "interval": interval_minutes,
                 "fromDate": from_dt.strftime("%Y-%m-%d %H:%M:%S"),
@@ -224,6 +243,7 @@ class DhanMarketData:
 
     def _post(self, path: str, body: dict, rate_limiter: "_RateLimiter" = None) -> dict:
         limiter = rate_limiter or _RATE_LIMITER
+        auth_retry_used = False
         for attempt in range(1, MAX_429_RETRIES + 1):
             limiter.wait_turn()
             access_token = self._token_manager.get_access_token()
@@ -246,9 +266,31 @@ class DhanMarketData:
                 time.sleep(wait_seconds)
                 continue
             if not response.ok:
+                if not auth_retry_used and self._is_auth_token_error(response):
+                    logger.warning(
+                        "%s rejected the current access token (%s); forcing a "
+                        "fresh PIN+TOTP regeneration and retrying once. This "
+                        "usually means another script/process using the same "
+                        "Dhan credentials generated a newer token, invalidating "
+                        "this one server-side.",
+                        path, response.text[:200],
+                    )
+                    auth_retry_used = True
+                    self._token_manager.get_access_token(force_refresh=True)
+                    continue
                 raise RuntimeError(f"{path} returned HTTP {response.status_code}: {response.text[:300]}")
             return response.json()
         raise RuntimeError(f"{path} still rate-limited after {MAX_429_RETRIES} retries")
+
+    @classmethod
+    def _is_auth_token_error(cls, response) -> bool:
+        if response.status_code not in (400, 401):
+            return False
+        try:
+            body = response.json()
+        except ValueError:
+            return False
+        return body.get("errorCode") in cls._AUTH_ERROR_CODES
 
     @staticmethod
     def _extract_ltp(response: dict, id_to_symbol: dict[str, str]) -> dict[str, float]:
