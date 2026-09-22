@@ -9,3 +9,4 @@ pyotp
 pytz
 python-dotenv
 requests
+pypdf
