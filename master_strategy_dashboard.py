@@ -23,6 +23,7 @@ from cpr_pro_dashboard import run_cpr_pro_tab as cpr_pro_dashboard
 from ichimoku_dashboard import run_ichimoku_tab as ichimoku_dashboard
 from exhaustion_dashboard import run_exhaustion_tab as exhaustion_dashboard
 from portfolio_dashboard import run_portfolio_tab as portfolio_dashboard
+from ribbon_scanner_dashboard import run_ribbon_scanner_tab as ribbon_scanner_dashboard
 
 warnings.filterwarnings("ignore")
 
@@ -100,6 +101,7 @@ STRATEGIES = [
     {"label": "CPR PRO", "id": "cprpro"},
     {"label": "IchiMK", "id": "ichimoku"},
     {"label": "ExhaustN", "id": "exhaustion"},
+    {"label": "Monthly", "id": "ribbon"},
 ]
 
 # ========== ENHANCEMENT FUNCTIONS (MATCHING JUST ABOVE/BELOW FORMAT) ==========
@@ -833,6 +835,13 @@ def clear_all_app_cache():
         fetch_nifty_history.clear()
     except Exception:
         pass
+    try:                                                     # <-- add this block
+        from ribbon_scanner_dashboard import fetch_universe_history, fetch_nifty_history, run_scan
+        fetch_universe_history.clear()
+        fetch_nifty_history.clear()
+        run_scan.clear()
+    except Exception:
+        pass
         
 if "cache_cleared_initial" not in st.session_state:
     clear_all_app_cache()
@@ -959,6 +968,8 @@ elif selected == "exhaustion":
     exhaustion_dashboard()
 elif selected == "portfolio":
     portfolio_dashboard()    
+elif selected == "ribbon":            # <-- add this block
+    ribbon_scanner_dashboard()
 elif selected == "rko":
     st.markdown("<div style='font-size:2.0em;font-weight:800;color:#FFD700;padding-bottom:10px;text-align:center;'>🔥 RKO - Enhanced Renko Scanner 🔥</div>", unsafe_allow_html=True)
     st.markdown("<div style='text-align:center;font-size:1.2em;color:#37F553;font-weight:700;padding:4px;'>✅ S/R Detection | ✅ Volume Analysis | ✅ OBV Divergence | ✅ MTF Alignment</div>", unsafe_allow_html=True)
