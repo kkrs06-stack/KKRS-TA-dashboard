@@ -82,12 +82,22 @@ _CSS = """
   }
   .pl-num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
   .pl-up{color:var(--jade);} .pl-down{color:var(--rose);}
+  .pl-eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-dim);margin:0 0 6px;}
+  .pl-h1{font-family:var(--font-display);font-style:italic;font-weight:500;font-size:34px;color:var(--ivory);margin:0 0 8px;line-height:1.05;}
+  .pl-desc{font-family:var(--font-sans);font-size:14.4px;color:var(--stone);max-width:none;line-height:1.5;margin:0 0 18px;}
+  .pl-seg-label{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--stone-dim);margin-bottom:8px;}
+  .pl-seg-active{font-family:var(--font-sans);font-size:28px;font-weight:500;text-align:center;color:var(--ivory);background:var(--raised);border:1px solid var(--gold);border-radius:2px;padding:10px 0;}
+  div[data-testid="stButton"] button{background:var(--surface)!important;border:1px solid var(--line)!important;color:var(--stone)!important;font-family:var(--font-sans)!important;}
+  div[data-testid="stButton"] button:hover{border-color:var(--gold)!important;color:var(--ivory)!important;}
+  div[data-testid="stVerticalBlockBorderWrapper"]{background:var(--surface)!important;border:1px solid var(--line)!important;border-radius:10px!important;}
+  div[data-testid="stSelectbox"] div[data-baseweb="select"] > div{background:var(--surface)!important;border-color:var(--line)!important;color:var(--ivory)!important;font-family:var(--font-sans)!important;}
+  div[data-testid="stSelectbox"] svg{fill:var(--stone)!important;}
   .pl-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:18px;}
   .pl-kpi{background:var(--surface);padding:16px 18px;}
-  .pl-kpi-label{font-family:var(--font-sans);font-size:13.8px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone);margin-bottom:9px;}
-  .pl-kpi-value{font-family:var(--font-display);font-size:30px;font-weight:500;color:var(--ivory);font-variant-numeric:tabular-nums;}
-  .pl-kpi-delta{font-family:var(--font-mono);font-size:16.2px;margin-top:5px;}
-  .pl-kpi-sub{font-family:var(--font-sans);font-size:14.4px;color:var(--stone-dim);margin-top:4px;}
+  .pl-kpi-label{font-family:var(--font-sans);font-size:20.7px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone);margin-bottom:9px;}
+  .pl-kpi-value{font-family:var(--font-display);font-size:45px;font-weight:500;color:var(--ivory);font-variant-numeric:tabular-nums;}
+  .pl-kpi-delta{font-family:var(--font-mono);font-size:24.3px;margin-top:5px;}
+  .pl-kpi-sub{font-family:var(--font-sans);font-size:21.6px;color:var(--stone-dim);margin-top:4px;}
   .pl-ribbon-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-bottom:18px;}
   .pl-ribbon-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;font-family:var(--font-sans);}
   .pl-ribbon-head h3{font-weight:500;font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--stone);margin:0;}
@@ -98,10 +108,10 @@ _CSS = """
   .pl-swatch{width:8px;height:8px;border-radius:2px;display:inline-block;}
   .pl-table-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:8px;}
   .pl-table-scroll{overflow-x:auto;}
-  .pl-table{width:100%;border-collapse:collapse;font-size:16.2px;min-width:1040px;font-family:var(--font-sans);}
-  .pl-table th{text-align:right;font-weight:500;font-size:13.1px;letter-spacing:.05em;text-transform:uppercase;color:var(--stone);padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface);}
+  .pl-table{width:100%;border-collapse:collapse;font-size:24.3px;min-width:1040px;font-family:var(--font-sans);}
+  .pl-table th{text-align:right;font-weight:500;font-size:19.65px;letter-spacing:.05em;text-transform:uppercase;color:var(--stone);padding:14px 16px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface);}
   .pl-table th:first-child,.pl-table th:nth-child(2){text-align:left;}
-  .pl-table td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;color:var(--ivory);}
+  .pl-table td{padding:14px 16px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;color:var(--ivory);}
   .pl-table td:first-child,.pl-table td:nth-child(2){text-align:left;}
   .pl-table tr:last-child td{border-bottom:none;}
   .pl-table tr:hover td{background:var(--raised);}
@@ -109,7 +119,7 @@ _CSS = """
   .pl-sym a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--stone-dim);}
   .pl-sym a:hover{border-bottom-color:var(--gold);color:var(--gold);}
   .pl-sector{color:var(--stone);font-size:15px;}
-  .pl-chip{display:inline-flex;align-items:center;gap:5px;font-size:13.8px;font-weight:500;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+  .pl-chip{display:inline-flex;align-items:center;gap:6px;font-size:20.7px;font-weight:500;padding:4px 12px;border-radius:20px;white-space:nowrap;}
   .pl-chip-jade{background:rgba(79,174,140,0.16);color:var(--jade);}
   .pl-chip-rose{background:rgba(201,99,107,0.16);color:var(--rose);}
   .pl-chip-amber{background:rgba(208,164,76,0.16);color:var(--amber);}
@@ -120,25 +130,26 @@ _CSS = """
   .pl-twin{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
   .pl-acct-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;font-family:var(--font-sans);}
   .pl-acct-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;}
-  .pl-acct-head h3{font-family:var(--font-display);font-weight:500;font-size:21.2px;margin:0;color:var(--ivory);}
-  .pl-acct-head .n{font-size:14.4px;color:var(--stone-dim);}
+  .pl-acct-head h3{font-family:var(--font-display);font-weight:500;font-size:31.8px;margin:0;color:var(--ivory);}
+  .pl-acct-head .n{font-size:21.6px;color:var(--stone-dim);}
   .pl-acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .pl-acct-stat{border-top:1px solid var(--line);padding-top:7px;}
-  .pl-acct-stat .l{font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--stone);margin-bottom:3px;}
-  .pl-acct-stat .v{font-family:var(--font-mono);font-size:20px;color:var(--ivory);font-variant-numeric:tabular-nums;}
+  .pl-acct-stat .l{font-size:18.75px;text-transform:uppercase;letter-spacing:.05em;color:var(--stone);margin-bottom:3px;}
+  .pl-acct-stat .v{font-family:var(--font-mono);font-size:30px;color:var(--ivory);font-variant-numeric:tabular-nums;}
+  .pl-caption{font-family:var(--font-sans);font-size:21px;color:var(--stone-dim);margin:8px 0 18px;}
   .pl-treemap-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;}
   .pl-treemap{display:flex;flex-direction:column;gap:4px;}
   .pl-tm-row{display:flex;gap:4px;}
   .pl-tm-box{border-radius:6px;padding:7px 9px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;position:relative;}
-  .pl-tm-sym{font-family:var(--font-sans);font-weight:600;font-size:15px;display:flex;align-items:center;gap:5px;}
-  .pl-tm-acct{font-family:var(--font-sans);font-size:11.9px;opacity:.72;margin-top:1px;}
+  .pl-tm-sym{font-family:var(--font-sans);font-weight:600;font-size:18.75px;display:flex;align-items:center;gap:5px;}
+  .pl-tm-acct{font-family:var(--font-sans);font-size:20.8px;opacity:.72;margin-top:1px;}
   .pl-tm-gain{font-family:var(--font-mono);font-size:14.4px;font-weight:500;align-self:flex-end;}
   .pl-tdot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
   .pl-tdot-jade{background:var(--jade);} .pl-tdot-amber{background:var(--amber);} .pl-tdot-rose{background:var(--rose);}
   .pl-tm-jade-3{background:#3D7A63;color:#EAF7F1;} .pl-tm-jade-2{background:#2E5B4C;color:#D6ECE3;} .pl-tm-jade-1{background:#22423A;color:#B9D6C9;}
   .pl-tm-rose-2{background:#5B3236;color:#F0D3D5;} .pl-tm-rose-1{background:#3B2528;color:#D9B3B6;}
   .pl-tm-other{background:var(--raised);color:var(--stone);border:1px dashed var(--line);}
-  .pl-tm-legend{display:flex;gap:16px;margin-top:12px;font-family:var(--font-sans);font-size:13.8px;color:var(--stone);flex-wrap:wrap;}
+  .pl-tm-legend{display:flex;gap:16px;margin-top:12px;font-family:var(--font-sans);font-size:20.7px;color:var(--stone);flex-wrap:wrap;}
   .pl-tm-legend span{display:inline-flex;align-items:center;gap:6px;}
 </style>
 """
@@ -148,8 +159,51 @@ def _inject_css():
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
+def _segmented_control(label: str, options: list[str], session_key: str, default: str) -> str:
+    """Same pattern as ribbon_scanner_dashboard.py's _segmented_control:
+    a real st.button() for each inactive option, custom-styled
+    st.markdown() standing in for the active one -- full font/color
+    control without fighting a native widget (this replaces both the
+    old st.tabs() switcher and the per-account "### {label}" markdown
+    header, which is now redundant with the active button itself)."""
+    if session_key not in st.session_state:
+        st.session_state[session_key] = default
+    st.markdown(f'<div class="pl-seg-label">{label}</div>', unsafe_allow_html=True)
+    cols = st.columns(len(options))
+    for col, option in zip(cols, options):
+        if st.session_state[session_key] == option:
+            with col:
+                st.markdown(f'<div class="pl-seg-active">{option}</div>', unsafe_allow_html=True)
+        else:
+            with col:
+                if st.button(option, key=f"{session_key}_{option}", use_container_width=True):
+                    st.session_state[session_key] = option
+                    st.rerun()
+    return st.session_state[session_key]
+
+
 def _fmt_lakh(value: float) -> str:
     return f"₹{value/100000:,.2f}L"
+
+
+def _fmt_date(d) -> str:
+    """DD-Mon-YYYY, matching the same format the master dashboard's own
+    header date already uses (e.g. 21-Sep-2026) -- one convention across
+    the whole app rather than a second, different-looking one just here."""
+    return d.strftime("%d-%b-%Y")
+
+
+# Indian financial year: 1 Apr - 31 Mar. Fixed start rather than "10 years
+# back from today" so the dropdown doesn't quietly change every year --
+# extend FY_DROPDOWN_START_YEAR forward once 2034-35 approaches.
+FY_DROPDOWN_START_YEAR = 2025
+FY_DROPDOWN_YEARS = 10
+
+
+def _financial_year_label(d) -> str:
+    """A date in Jan-Mar belongs to the FY that started the previous April."""
+    start_year = d.year if d.month >= 4 else d.year - 1
+    return f"FY {start_year}-{str(start_year + 1)[-2:]}"
 
 
 def _missing(value) -> bool:
@@ -160,12 +214,6 @@ def _missing(value) -> bool:
     that case and lets a stray "nan" leak into the rendered text.
     """
     return value is None or pd.isna(value)
-
-
-def _gain_pct_class(gain_pct: float | None) -> str:
-    if _missing(gain_pct):
-        return "pl-chip-gray"
-    return "pl-up" if gain_pct >= 0 else "pl-down"
 
 
 def _gain_tier_class(gain_pct: float | None) -> str:
@@ -319,6 +367,9 @@ def _load_account(account_name: str, transactions_path: str, sector_map: dict, m
     metrics = metrics.merge(technical_df, on="symbol", how="left")
     metrics["account"] = account_name
 
+    if not realized_gains.empty:
+        realized_gains["account"] = account_name
+
     return {"lots": lots, "metrics": metrics, "summary": summary, "realized_gains": realized_gains}
 
 
@@ -383,32 +434,33 @@ _TABLE_COMPONENT_HEAD = """
   .pl-up{color:var(--jade);} .pl-down{color:var(--rose);}
   .pl-table-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:8px;}
   .pl-table-scroll{overflow-x:auto;}
-  .pl-table{width:100%;border-collapse:collapse;font-size:16.2px;min-width:1220px;}
-  .pl-table th{text-align:right;font-weight:500;font-size:13.1px;letter-spacing:.05em;text-transform:uppercase;color:var(--stone);padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface);}
+  .pl-table{width:100%;border-collapse:collapse;font-size:24.3px;min-width:1220px;}
+  .pl-table th{text-align:right;font-weight:500;font-size:19.65px;letter-spacing:.05em;text-transform:uppercase;color:var(--stone);padding:14px 16px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface);}
   .pl-table th:first-child,.pl-table th:nth-child(2){text-align:left;}
   .pl-table th.sortable{cursor:pointer;user-select:none;}
   .pl-table th.sortable:hover{color:var(--ivory);}
-  .pl-table th .arrow{font-size:10px;margin-left:2px;color:var(--gold);}
-  .pl-table td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;color:var(--ivory);}
+  .pl-table th .arrow{font-size:14px;margin-left:2px;color:var(--gold);}
+  .pl-table td{padding:14px 16px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;color:var(--ivory);}
   .pl-table td:first-child,.pl-table td:nth-child(2){text-align:left;}
   .pl-table tr:last-child td{border-bottom:none;}
   .pl-table tr:hover td{background:var(--raised);}
   .pl-sym{font-weight:500;color:var(--ivory);}
   .pl-sym a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--stone-dim);}
   .pl-sym a:hover{border-bottom-color:var(--gold);color:var(--gold);}
-  .pl-chip{display:inline-flex;align-items:center;gap:5px;font-size:13.8px;font-weight:500;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+  .pl-chip{display:inline-flex;align-items:center;gap:6px;font-size:20.7px;font-weight:500;padding:4px 12px;border-radius:20px;white-space:nowrap;}
   .pl-chip-jade{background:rgba(79,174,140,0.16);color:var(--jade);}
   .pl-chip-rose{background:rgba(201,99,107,0.16);color:var(--rose);}
   .pl-chip-amber{background:rgba(208,164,76,0.16);color:var(--amber);}
   .pl-chip-gray{background:rgba(139,146,151,0.14);color:var(--stone);}
-  .pl-dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
+  .pl-chip-gain{font-size:29px;font-weight:700;}
+  .pl-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
   .pl-tdot-jade{background:var(--jade);} .pl-tdot-amber{background:var(--amber);} .pl-tdot-rose{background:var(--rose);}
-  .pl-ltcg{font-family:var(--font-mono);font-size:14.4px;color:var(--stone);}
-  .pl-tf-group{display:flex;gap:10px;justify-content:flex-end;}
-  .pl-tf{display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 6px;border-radius:6px;}
+  .pl-ltcg{font-family:var(--font-mono);font-size:21.6px;color:var(--stone);}
+  .pl-tf-group{display:flex;gap:14px;justify-content:flex-end;}
+  .pl-tf{display:flex;flex-direction:column;align-items:center;gap:5px;padding:5px 8px;border-radius:6px;}
   .pl-tf:hover{background:var(--raised);}
-  .pl-tf .lbl{font-size:12.5px;color:var(--stone-dim);letter-spacing:.03em;font-weight:500;}
-  .pl-tf .pl-dot{width:11px;height:11px;}
+  .pl-tf .lbl{font-size:18.75px;color:var(--stone-dim);letter-spacing:.03em;font-weight:500;}
+  .pl-tf .pl-dot{width:14px;height:14px;}
   .pl-tf .pl-dot.fresh{box-shadow:0 0 0 3px var(--gold);}
 </style>
 """
@@ -450,9 +502,14 @@ def _render_holdings_table(metrics: pd.DataFrame):
     rows = []
     for _, r in metrics.iterrows():
         tv_url = f"https://www.tradingview.com/chart/{TRADINGVIEW_CHART_ID}/?symbol=NSE%3A{r['symbol']}"
-        gain_cls = _gain_pct_class(r["gain_pct"])
-        gain_txt = "N/A" if _missing(r["gain_pct"]) else f"{r['gain_pct']:+.1f}%"
-        gain_sort = -999999 if _missing(r["gain_pct"]) else r["gain_pct"]
+        gain_pct = r["gain_pct"]
+        gain_sort = -999999 if _missing(gain_pct) else gain_pct
+        if _missing(gain_pct):
+            gain_chip = '<span class="pl-chip pl-chip-gray pl-chip-gain">N/A</span>'
+        else:
+            gain_cls = "pl-chip-jade" if gain_pct >= 0 else "pl-chip-rose"
+            gain_dot_cls = "pl-tdot-jade" if gain_pct >= 0 else "pl-tdot-rose"
+            gain_chip = f'<span class="pl-chip {gain_cls} pl-chip-gain"><span class="pl-dot {gain_dot_cls}"></span>{gain_pct:+.1f}%</span>'
 
         xirr_txt = "N/A" if _missing(r["xirr_pct"]) else f"{r['xirr_pct']:.1f}%" + (" (prov.)" if r.get("xirr_provisional") else "")
         xirr_sort = -999999 if _missing(r["xirr_pct"]) else r["xirr_pct"]
@@ -484,7 +541,7 @@ def _render_holdings_table(metrics: pd.DataFrame):
             f'<td class="pl-num">{current_price_txt}</td>'
             f'<td class="pl-num">{r["invested"]:,.0f}</td>'
             f'<td class="pl-num">{r["current_value"]:,.0f}</td>'
-            f'<td class="pl-num {gain_cls}" data-key="gain" data-value="{gain_sort}">{gain_txt}</td>'
+            f'<td data-key="gain" data-value="{gain_sort}">{gain_chip}</td>'
             f'<td class="pl-num" data-key="xirr" data-value="{xirr_sort}">{xirr_txt}</td>'
             f'<td data-key="alpha" data-value="{alpha_sort}">{alpha_chip}</td>'
             f'<td class="pl-ltcg">{r["ltcg_pct"]:.0f}%</td>'
@@ -534,8 +591,15 @@ def _render_holdings_table(metrics: pd.DataFrame):
         "</script>"
     )
 
+    # 56px/row was too tight even before the font-size increases above --
+    # the Technical column's stacked label+dot cells were already taller
+    # than that, and the shortfall compounds row by row until the last
+    # row falls outside the iframe's fixed height and gets clipped. Sized
+    # generously now (the tallest cell, Technical, is ~80px post-bump) --
+    # a little empty space at the bottom is a far smaller problem than a
+    # clipped row.
     row_count = len(metrics)
-    height = 70 + row_count * 56 + 40
+    height = 90 + row_count * 100 + 60
     components.html(body_html, height=height, scrolling=False)
 
     st.markdown(
@@ -553,18 +617,22 @@ def _render_account_view(account_data: dict, label: str):
     metrics = account_data["metrics"]
 
     alpha = summary.get("alpha_pct")
+    total_return = summary["total_gain"] + summary["realized_gain_all_time"]
     kpi_items = [
         {"label": "Invested", "value": _fmt_lakh(summary["total_invested"]), "sub": f"across {len(metrics)} positions"},
         {"label": "Current value", "value": _fmt_lakh(summary["total_current"]),
          "delta": f"↑ {summary['total_gain_pct']:+.1f}%" if summary["total_gain_pct"] is not None else None},
-        {"label": "Unrealised gain", "value": _fmt_lakh(summary["total_gain"]), "value_positive": summary["total_gain"] >= 0,
-         "sub": f"realised, all-time ₹{summary['realized_gain_all_time']:,.0f}"},
+        {"label": "Total Return", "value": _fmt_lakh(total_return), "value_positive": total_return >= 0,
+         "sub": f"unrealised ₹{summary['total_gain']:,.0f} + realised ₹{summary['realized_gain_all_time']:,.0f}"},
         {"label": "Portfolio XIRR", "value": f"{summary['portfolio_xirr_pct']:.1f}%" if summary["portfolio_xirr_pct"] is not None else "N/A",
          "sub": "annualised, money-weighted"},
         {"label": "Vs. Nifty 50", "value": f"{alpha:+.1f}pp" if alpha is not None else "N/A", "value_positive": (alpha >= 0) if alpha is not None else None,
          "sub": "alpha on same cash-flow dates"},
     ]
-    st.markdown(f"### {label}")
+    # No "### {label}" header here -- the active tab-switcher button
+    # above (run_portfolio_tab) already shows which account you're on,
+    # at the bigger size, so a second repeat of the same word right
+    # below it was pure redundancy.
     _render_kpi_band(kpi_items)
 
     if summary.get("concentration_flag"):
@@ -582,7 +650,7 @@ def _render_twin_comparison(accounts: dict):
     for name, data in accounts.items():
         s = data["summary"]
         alpha = s.get("alpha_pct")
-        alpha_html = f'<div class="v pl-up">{alpha:+.1f}pp</div>' if alpha is not None else '<div class="v" style="color:var(--stone);font-size:12px;">pending</div>'
+        alpha_html = f'<div class="v pl-up">{alpha:+.1f}pp</div>' if alpha is not None else '<div class="v" style="color:var(--stone);font-size:18px;">pending</div>'
         cards.append(
             f'<div class="pl-acct-card"><div class="pl-acct-head"><h3>{name}</h3>'
             f'<span class="n">{len(data["metrics"])} positions</span></div>'
@@ -592,7 +660,7 @@ def _render_twin_comparison(accounts: dict):
             f'<div class="pl-acct-stat"><div class="l">Gain</div><div class="v pl-up">{s["total_gain_pct"]:+.1f}%</div></div>'
             f'<div class="pl-acct-stat"><div class="l">XIRR</div><div class="v">{s["portfolio_xirr_pct"]:.1f}%</div></div>'
             f'<div class="pl-acct-stat"><div class="l">Vs. Nifty</div>{alpha_html}</div>'
-            f'<div class="pl-acct-stat"><div class="l">Top holding</div><div class="v" style="font-size:12.5px;">{s["top_holding_symbol"]} &middot; {s["top_holding_concentration_pct"]:.1f}%</div></div>'
+            f'<div class="pl-acct-stat"><div class="l">Top holding</div><div class="v" style="font-size:18.75px;">{s["top_holding_symbol"]} &middot; {s["top_holding_concentration_pct"]:.1f}%</div></div>'
             '</div></div>'
         )
     st.markdown(f'<div class="pl-twin">{"".join(cards)}</div>', unsafe_allow_html=True)
@@ -672,22 +740,121 @@ def _render_household_treemap(combined_metrics: pd.DataFrame):
     st.markdown(html, unsafe_allow_html=True)
 
 
+def _render_history_tab(accounts: dict):
+    """Closed-position ledger, grouped by calendar year and person. The
+    underlying data (FIFO-matched buy/sell pairs with realized gain and
+    LTCG/STCG status) was already being computed by resolve_open_lots_fifo
+    for every run -- only ever used before for one summary number
+    ("realised, all-time"). This is the row-level detail surfaced."""
+    non_empty = [a["realized_gains"] for a in accounts.values() if not a["realized_gains"].empty]
+    if not non_empty:
+        st.info("No closed positions yet -- this tab fills in as sales are recorded.")
+        return
+
+    all_realized = pd.concat(non_empty, ignore_index=True)
+    all_realized["fy"] = all_realized["sell_date"].apply(_financial_year_label)
+    fy_options = ["All"] + [
+        f"FY {y}-{str(y + 1)[-2:]}" for y in range(FY_DROPDOWN_START_YEAR, FY_DROPDOWN_START_YEAR + FY_DROPDOWN_YEARS)
+    ]
+    person_options = ["Combined"] + list(accounts.keys())
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('<div class="pl-seg-label">Financial Year</div>', unsafe_allow_html=True)
+        selected_fy = st.selectbox("Financial Year", fy_options, index=0, label_visibility="collapsed")
+    with col2:
+        selected_person = _segmented_control("Person", person_options, "portfolio_history_person", "Combined")
+
+    filtered = all_realized
+    if selected_fy != "All":
+        filtered = filtered[filtered["fy"] == selected_fy]
+    if selected_person != "Combined":
+        filtered = filtered[filtered["account"] == selected_person]
+
+    if filtered.empty:
+        st.write("No closed positions match this filter.")
+        return
+
+    total_realized = filtered["realized_gain"].sum()
+    num_closed = len(filtered)
+    win_rate = (filtered["realized_gain"] > 0).mean() * 100
+    ltcg_amount = filtered.loc[filtered["tax_status"] == "LTCG", "realized_gain"].sum()
+    stcg_amount = filtered.loc[filtered["tax_status"] == "STCG", "realized_gain"].sum()
+
+    kpi_items = [
+        {"label": "Realized gain/loss", "value": _fmt_lakh(total_realized), "value_positive": total_realized >= 0,
+         "sub": f"{num_closed} closed position(s)"},
+        {"label": "Win rate", "value": f"{win_rate:.0f}%", "sub": "of closed positions profitable"},
+        {"label": "LTCG", "value": f"{'-' if ltcg_amount < 0 else ''}₹{abs(ltcg_amount):,.0f}", "value_positive": ltcg_amount >= 0, "sub": "held 365+ days"},
+        {"label": "STCG", "value": f"{'-' if stcg_amount < 0 else ''}₹{abs(stcg_amount):,.0f}", "value_positive": stcg_amount >= 0, "sub": "held under 365 days"},
+    ]
+    _render_kpi_band(kpi_items)
+
+    rows = []
+    for _, r in filtered.sort_values("sell_date", ascending=False).iterrows():
+        gain = r["realized_gain"]
+        cost_basis = r["buy_rate"] * r["quantity"]
+        gain_pct_txt = f" ({gain / cost_basis * 100:+.1f}%)" if cost_basis else ""
+        gain_cls = "pl-chip-jade" if gain >= 0 else "pl-chip-rose"
+        gain_dot = "pl-tdot-jade" if gain >= 0 else "pl-tdot-rose"
+        gain_chip = f'<span class="pl-chip {gain_cls}"><span class="pl-dot {gain_dot}"></span>₹{gain:+,.0f}{gain_pct_txt}</span>'
+        tax_cls = "pl-chip-amber" if r["tax_status"] == "STCG" else "pl-chip-jade"
+        tax_chip = f'<span class="pl-chip {tax_cls}">{r["tax_status"]}</span>'
+        rows.append(
+            "<tr>"
+            f'<td class="pl-sym">{r["symbol"]}</td>'
+            f'<td>{r["account"]}</td>'
+            f'<td class="pl-num">{_fmt_date(r["buy_date"])}</td>'
+            f'<td class="pl-num">{_fmt_date(r["sell_date"])}</td>'
+            f'<td class="pl-num">{r["holding_days"]}</td>'
+            f'<td class="pl-num">{r["quantity"]:,}</td>'
+            f'<td class="pl-num">{r["buy_rate"]:,.2f}</td>'
+            f'<td class="pl-num">{r["sell_rate"]:,.2f}</td>'
+            f'<td>{gain_chip}</td>'
+            f'<td>{tax_chip}</td>'
+            "</tr>"
+        )
+
+    labels = ["Symbol", "Account", "Buy Date", "Sell Date", "Held (days)", "Qty", "Buy Price", "Sell Price", "Realized Gain", "Tax Status"]
+    header_cells = "".join(f"<th>{label}</th>" for label in labels)
+    table_html = (
+        f'<div class="pl-table-card"><div class="pl-table-scroll"><table class="pl-table"><thead><tr>{header_cells}</tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table></div></div>'
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+    st.markdown(
+        '<p class="pl-foot-note">Realized gain is computed FIFO -- each sale is matched against your oldest '
+        "open lot(s) first, the same method used to determine LTCG (365+ days held) vs STCG tax status. A "
+        "single sell that spanned multiple buy lots at different prices/dates appears as multiple rows "
+        "here.</p>",
+        unsafe_allow_html=True,
+    )
+
+
 # =====================================================
 # Main Streamlit tab
 # =====================================================
 
 def run_portfolio_tab():
     _inject_css()
-    st.title("Portfolio Dashboard")
-    st.caption("Household summary + per-account drill-down. Manually re-export from the broker to refresh lot data.")
+    st.markdown(
+        '<div class="pl-eyebrow">Trading Suite</div>'
+        '<div class="pl-h1">Portfolio Dashboard</div>'
+        '<p class="pl-desc">Household summary + per-account drill-down. Manually re-export from the broker to refresh lot data.</p>',
+        unsafe_allow_html=True,
+    )
 
-    if st.button("\U0001F504 Refresh Market Data"):
-        fetch_market_data.clear()
-        fetch_nifty_history.clear()
-        st.session_state.pop("portfolio_results", None)
-        st.session_state.pop("portfolio_nifty", None)
+    refresh_col, load_col = st.columns(2)
+    with refresh_col:
+        if st.button("\U0001F504 Refresh Market Data", use_container_width=True):
+            fetch_market_data.clear()
+            fetch_nifty_history.clear()
+            st.session_state.pop("portfolio_results", None)
+            st.session_state.pop("portfolio_nifty", None)
+    with load_col:
+        load_clicked = st.button("Load / Refresh Portfolio Dashboard", use_container_width=True)
 
-    if st.button("Load / Refresh Portfolio Dashboard") or "portfolio_results" in st.session_state:
+    if load_clicked or "portfolio_results" in st.session_state:
         if "portfolio_results" not in st.session_state:
             sector_map = load_sector_map(SECTOR_MAP_PATH)
 
@@ -757,16 +924,18 @@ def run_portfolio_tab():
             if household_xirr is not None and household_benchmark_xirr is not None else None
         )
 
-        tab_labels = ["Household"] + list(ACCOUNTS.keys())
-        tabs = st.tabs(tab_labels)
+        view_options = ["Household"] + list(ACCOUNTS.keys()) + ["History"]
+        view = _segmented_control("View", view_options, "portfolio_view", "Household")
 
-        with tabs[0]:
+        if view == "Household":
+            household_realized = sum(a["summary"]["realized_gain_all_time"] for a in accounts.values())
+            household_total_return = total_gain + household_realized
             kpi_items = [
                 {"label": "Invested", "value": _fmt_lakh(total_invested), "sub": f"{len(combined_metrics)} positions, {len(accounts)} accounts"},
                 {"label": "Current value", "value": _fmt_lakh(total_current),
                  "delta": f"↑ {total_gain/total_invested*100:+.1f}%" if total_invested else None},
-                {"label": "Unrealised gain", "value": _fmt_lakh(total_gain), "value_positive": total_gain >= 0,
-                 "sub": f"realised, all-time ₹{sum(a['summary']['realized_gain_all_time'] for a in accounts.values()):,.0f}"},
+                {"label": "Total Return", "value": _fmt_lakh(household_total_return), "value_positive": household_total_return >= 0,
+                 "sub": f"unrealised ₹{total_gain:,.0f} + realised ₹{household_realized:,.0f}"},
                 {"label": "Household XIRR", "value": f"{household_xirr*100:.1f}%" if household_xirr is not None else "N/A",
                  "sub": "annualised, money-weighted"},
                 {"label": "Top position", "value": top_row["symbol"] if top_row is not None else "N/A",
@@ -774,14 +943,19 @@ def run_portfolio_tab():
             ]
             _render_kpi_band(kpi_items)
             if household_alpha is not None:
-                st.caption(f"vs. Nifty 50 (same cash-flow dates/amounts): household XIRR {household_xirr*100:.1f}% vs. benchmark {household_benchmark_xirr*100:.1f}% — alpha {household_alpha:+.1f}pp")
+                st.markdown(
+                    f'<p class="pl-caption">vs. Nifty 50 (same cash-flow dates/amounts): household XIRR '
+                    f'{household_xirr*100:.1f}% vs. benchmark {household_benchmark_xirr*100:.1f}% — alpha '
+                    f'{household_alpha:+.1f}pp</p>',
+                    unsafe_allow_html=True,
+                )
 
             _render_twin_comparison(accounts)
             _render_household_treemap(combined_metrics)
-
-        for i, (name, data) in enumerate(accounts.items(), start=1):
-            with tabs[i]:
-                _render_account_view(data, name)
+        elif view == "History":
+            _render_history_tab(accounts)
+        else:
+            _render_account_view(accounts[view], view)
 
     else:
         st.info("Click 'Load / Refresh Portfolio Dashboard' to fetch live prices and compute metrics.")
