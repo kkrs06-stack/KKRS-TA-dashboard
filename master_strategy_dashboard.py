@@ -858,7 +858,7 @@ with title_cols[2]:
         st.success("✅ Cache cleared!")
         st.rerun()
 
-selected = st.query_params.get('selected_strategy', 'rsi')
+selected = st.query_params.get('selected_strategy', 'portfolio')
 if isinstance(selected, list):
     selected = selected[0]
 
